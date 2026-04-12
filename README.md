@@ -4,12 +4,16 @@ Brain is a markdown-first Obsidian plugin for quick capture, daily journaling, a
 
 It keeps user data in normal vault files and works without AI. OpenAI is optional and only used for summaries or routing when configured.
 
+The sidebar includes quick capture, inbox triage, review history, and summary actions so you can move from capture to review without leaving Obsidian.
+
 ## Features
 
 - quick note capture into `Brain/inbox.md`
 - quick task capture into `Brain/tasks.md`
 - daily journal entries into `Brain/journal/YYYY-MM-DD.md`
-- recent-note summaries with a fallback local summary
+- inbox triage with review markers and review history
+- promoted notes into `Brain/notes/`
+- recent markdown summaries with a fallback local summary
 - optional OpenAI summaries and capture routing
 - command palette actions and a persistent sidebar
 
@@ -30,6 +34,8 @@ manifest.json
 styles.css
 ```
 
+Place them in a plugin folder named `brain` inside `.obsidian/plugins/` in your vault.
+
 3. Enable the plugin in Obsidian.
 
 If you are developing locally, keep the repository folder inside your Obsidian community plugins directory and rebuild after changes.
@@ -39,8 +45,24 @@ If you are developing locally, keep the repository folder inside your Obsidian c
 - `Brain: Capture Note`
 - `Brain: Add Task`
 - `Brain: Add Journal Entry`
+- `Brain: Process Inbox`
+- `Brain: Review History`
 - `Brain: Summarize Recent Notes`
+- `Brain: Summarize Today`
+- `Brain: Summarize This Week`
+- `Brain: Add Task From Selection`
+- `Brain: Open Today's Journal`
 - `Brain: Open Sidebar`
+
+## Inbox Review
+
+The inbox review modal supports keyboard shortcuts for faster triage:
+
+- `k` keep in inbox
+- `t` convert to task
+- `j` append to journal
+- `n` promote to note
+- `s` skip
 
 ## Default Vault Layout
 
@@ -50,6 +72,8 @@ Brain/
   tasks.md
   journal/
     YYYY-MM-DD.md
+  notes/
+  reviews/
   summaries/
 ```
 
@@ -58,7 +82,9 @@ Brain/
 - inbox file path
 - tasks file path
 - journal folder
+- notes folder
 - summaries folder
+- reviews folder
 - AI summaries toggle
 - AI routing toggle
 - OpenAI API key
