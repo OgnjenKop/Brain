@@ -2,7 +2,7 @@
 
 Brain is an Obsidian plugin for turning a markdown vault into a lightweight LLM wiki.
 
-It keeps markdown as the source of truth, helps you capture and organize raw notes, and adds focused AI workflows for summarizing, routing, and, next, synthesizing vault context into useful markdown.
+It keeps markdown as the source of truth and makes the vault easier to query, synthesize, and reshape into useful knowledge artifacts.
 
 ## What Brain Is
 
@@ -13,11 +13,11 @@ Brain is built around a simple idea:
 That means:
 
 - markdown files stay canonical
-- AI is optional
 - the plugin stays local-first and simple
+- LLM features are layered on top of explicit vault context
 - output comes back as markdown you keep in your vault
 
-## Current Features
+## Current Foundation
 
 - quick note capture into `Brain/inbox.md`
 - quick task capture into `Brain/tasks.md`
@@ -25,7 +25,7 @@ That means:
 - inbox triage with promotion to task, journal, or note
 - review history with reopen support
 - recent markdown summaries with a local fallback summarizer
-- optional OpenAI summaries and sidebar auto-routing
+- OpenAI summaries and sidebar auto-routing when configured
 - command palette actions plus a persistent sidebar
 
 ## Vault Layout
@@ -94,8 +94,6 @@ Keyboard shortcuts:
 Review actions are written to markdown logs in `Brain/reviews/`, and reviewed items can be re-opened from review history.
 
 ## AI
-
-AI is optional.
 
 Without AI:
 
