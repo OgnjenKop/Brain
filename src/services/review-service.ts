@@ -1,0 +1,151 @@
+import { collapseWhitespace, formatDateTimeKey } from "../utils/date";
+import { InboxEntry, InboxEntryIdentity, InboxService } from "./inbox-service";
+import { JournalService } from "./journal-service";
+import { TaskService } from "./task-service";
+import { ReviewLogEntry, ReviewLogService } from "./review-log-service";
+import { BrainPluginSettings } from "../settings/settings";
+import { VaultService } from "./vault-service";
+
+export class ReviewService {
+  constructor(
+    private readonly vaultService: VaultService,
+    private readonly inboxService: InboxService,
+    private readonly taskService: TaskService,
+    private readonly journalService: JournalService,
+    private readonly reviewLogService: ReviewLogService,
+    private readonly settingsProvider: () => BrainPluginSettings,
+  ) {}
+
+  async getRecentInboxEntries(limit = 20): Promise<InboxEntry[]> {
+    return this.inboxService.getRecentEntries(limit);
+  }
+
+  async promoteToTask(entry: InboxEntry): Promise<string> {
+    const text = entry.body || entry.preview || entry.heading;
+    const saved = await this.taskService.appendTask(text);
+    await this.appendReviewLogBestEffort(entry, "task");
+    const markerUpdated = await this.markInboxReviewed(entry, "task");
+    return this.appendMarkerNote(
+      `Promoted inbox entry to task in ${saved.path}`,
+      markerUpdated,
+    );
+  }
+
+  async keepEntry(entry: InboxEntry): Promise<string> {
+    await this.appendReviewLogBestEffort(entry, "keep");
+    const markerUpdated = await this.markInboxReviewed(entry, "keep");
+    return this.appendMarkerNote("Kept inbox entry", markerUpdated);
+  }
+
+  async skipEntry(entry: InboxEntry): Promise<string> {
+    await this.appendReviewLogBestEffort(entry, "skip");
+    const markerUpdated = await this.markInboxReviewed(entry, "skip");
+    return this.appendMarkerNote("Skipped inbox entry", markerUpdated);
+  }
+
+  async appendToJournal(entry: InboxEntry): Promise<string> {
+    const saved = await this.journalService.appendEntry(
+      [
+        `Source: ${entry.heading}`,
+        "",
+        entry.body || entry.preview || entry.heading,
+      ].join("\n"),
+    );
+    await this.appendReviewLogBestEffort(entry, "journal");
+    const markerUpdated = await this.markInboxReviewed(entry, "journal");
+    return this.appendMarkerNote(`Appended inbox entry to ${saved.path}`, markerUpdated);
+  }
+
+  async promoteToNote(entry: InboxEntry): Promise<string> {
+    const now = new Date();
+    const settings = this.settingsProvider();
+    const notesFolder = settings.notesFolder;
+    await this.vaultService.ensureFolder(notesFolder);
+
+    const title = this.buildNoteTitle(entry);
+    const filename = `${formatDateTimeKey(now).replace(/[: ]/g, "-")}-${slugify(title)}.md`;
+    const path = await this.vaultService.ensureUniqueFilePath(`${notesFolder}/${filename}`);
+    const content = [
+      `# ${title}`,
+      "",
+      `Created: ${formatDateTimeKey(now)}`,
+      "Source: Brain inbox",
+      "",
+      "Original capture:",
+      entry.body || entry.preview || entry.heading,
+      "",
+    ].join("\n");
+
+    await this.vaultService.appendText(path, content);
+    await this.appendReviewLogBestEffort(entry, "note");
+    const markerUpdated = await this.markInboxReviewed(entry, "note");
+    return this.appendMarkerNote(`Promoted inbox entry to note in ${path}`, markerUpdated);
+  }
+
+  async reopenFromReviewLog(entry: ReviewLogEntry): Promise<string> {
+    const identity = {
+      heading: entry.heading,
+      body: "",
+      preview: entry.preview,
+      signature: entry.signature,
+      signatureIndex: entry.signatureIndex,
+    };
+    const reopened = await this.inboxService.reopenEntry(identity);
+    if (!reopened) {
+      throw new Error(`Could not re-open inbox entry ${entry.heading}`);
+    }
+    await this.appendReviewLogBestEffort(identity, "reopen");
+    return `Re-opened inbox entry ${entry.heading}`;
+  }
+
+  buildNoteTitle(entry: InboxEntry): string {
+    const candidate = entry.preview || entry.body || entry.heading;
+    const lines = candidate
+      .split("\n")
+      .map((line) => collapseWhitespace(line))
+      .filter(Boolean);
+
+    const first = lines[0] ?? "Untitled note";
+    return trimTitle(first);
+  }
+
+  private async markInboxReviewed(entry: InboxEntry, action: string): Promise<boolean> {
+    try {
+      return await this.inboxService.markEntryReviewed(entry, action);
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }
+
+  private appendMarkerNote(message: string, markerUpdated: boolean): string {
+    return markerUpdated ? message : `${message} (review marker not updated)`;
+  }
+
+  private async appendReviewLogBestEffort(
+    entry: InboxEntryIdentity,
+    action: string,
+  ): Promise<void> {
+    try {
+      await this.reviewLogService.appendReviewLog(entry, action);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "note";
+}
+
+function trimTitle(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= 60) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 57).trimEnd()}...`;
+}

@@ -1,0 +1,10 @@
+{
+  "id": "brain",
+  "name": "Brain",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Markdown-first AI-assisted second brain for Obsidian.",
+  "author": "Brain contributors",
+  "isDesktopOnly": false,
+  "main": "main.js"
+}
