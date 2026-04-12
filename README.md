@@ -1,44 +1,39 @@
 # Brain
 
-Brain is a markdown-first Obsidian plugin for quick capture, daily journaling, and lightweight summaries.
+Brain is a markdown-first Obsidian plugin for fast capture, inbox review, daily journaling, and lightweight summaries.
 
-It keeps user data in normal vault files and works without AI. OpenAI is optional and only used for summaries or routing when configured.
+It is built around a simple rule: your vault stays the source of truth. Notes, tasks, journal entries, summaries, and review logs all live in normal markdown files inside Obsidian. AI is optional and the core workflow still works without it.
 
-The sidebar includes quick capture, inbox triage, review history, and summary actions so you can move from capture to review without leaving Obsidian.
+## What It Does
 
-## Features
+- capture quick notes into `Brain/inbox.md`
+- append tasks into `Brain/tasks.md`
+- write daily journal entries into `Brain/journal/YYYY-MM-DD.md`
+- review inbox items and promote them into tasks, journal entries, or standalone notes
+- keep a review log in `Brain/reviews/`
+- generate recent markdown summaries with a local fallback summarizer
+- optionally use OpenAI for summaries and capture routing
+- expose everything through commands and a persistent sidebar
 
-- quick note capture into `Brain/inbox.md`
-- quick task capture into `Brain/tasks.md`
-- daily journal entries into `Brain/journal/YYYY-MM-DD.md`
-- inbox triage with review markers and review history
-- promoted notes into `Brain/notes/`
-- recent markdown summaries with a fallback local summary
-- optional OpenAI summaries and capture routing
-- command palette actions and a persistent sidebar
+## Why This Exists
 
-## Install
+Most AI note tools move too quickly toward opaque workflows, hidden storage, or heavy automation. Brain takes the opposite approach:
 
-1. Build the plugin:
+- markdown is the source of truth
+- the plugin is useful without AI
+- the architecture stays simple
+- the workflow is optimized for low-friction daily use
 
-```bash
-npm install
-npm run build
-```
+## Current Scope
 
-2. Copy the plugin files into your vault's plugin folder:
+Brain is intentionally small. It is not trying to be:
 
-```text
-main.js
-manifest.json
-styles.css
-```
+- an agent system
+- a vector database
+- a background automation engine
+- a replacement for your vault structure
 
-Place them in a plugin folder named `brain` inside `.obsidian/plugins/` in your vault.
-
-3. Enable the plugin in Obsidian.
-
-If you are developing locally, keep the repository folder inside your Obsidian community plugins directory and rebuild after changes.
+The focus is capture, review, and summary.
 
 ## Commands
 
@@ -54,15 +49,37 @@ If you are developing locally, keep the repository folder inside your Obsidian c
 - `Brain: Open Today's Journal`
 - `Brain: Open Sidebar`
 
+## Sidebar Workflow
+
+The sidebar is the fastest way to use the plugin day to day. It includes:
+
+- quick capture for note, task, and journal entry saves
+- review actions for inbox processing and journal access
+- summary actions
+- status for inbox, tasks, AI, review history, and the last summary
+- output panels for the latest action and summary
+
 ## Inbox Review
 
-The inbox review modal supports keyboard shortcuts for faster triage:
+Inbox review is designed to help you move from raw capture to a cleaner vault.
+
+Available actions:
+
+- keep in inbox
+- convert to task
+- append to journal
+- promote to note
+- skip
+
+Keyboard shortcuts in the review modal:
 
 - `k` keep in inbox
 - `t` convert to task
 - `j` append to journal
 - `n` promote to note
 - `s` skip
+
+Review actions are logged in markdown, and reviewed inbox items can be re-opened from review history.
 
 ## Default Vault Layout
 
@@ -77,7 +94,44 @@ Brain/
   summaries/
 ```
 
+## Installation
+
+### From source
+
+1. Install dependencies and build:
+
+```bash
+npm install
+npm run build
+```
+
+2. Copy these files into a folder named `brain` inside your vault's `.obsidian/plugins/` directory:
+
+```text
+main.js
+manifest.json
+styles.css
+```
+
+3. Enable the plugin in Obsidian.
+
+### Local development
+
+If you are developing locally, place this repository directly inside `.obsidian/plugins/brain` and rebuild after changes:
+
+```bash
+npm run build
+```
+
+For active development:
+
+```bash
+npm run dev
+```
+
 ## Settings
+
+Storage:
 
 - inbox file path
 - tasks file path
@@ -85,13 +139,38 @@ Brain/
 - notes folder
 - summaries folder
 - reviews folder
-- AI summaries toggle
-- AI routing toggle
+
+AI:
+
+- enable AI summaries
+- enable AI routing
 - OpenAI API key
 - OpenAI model
-- summary lookback window
-- summary character limit
-- persist summaries toggle
+
+Summary behavior:
+
+- lookback window
+- maximum input characters
+- persist summaries
+
+Default model: `gpt-4.1-mini`
+
+## AI Behavior
+
+AI is optional.
+
+Without AI:
+
+- capture works normally
+- inbox review works normally
+- summaries use the built-in fallback summarizer
+
+With AI enabled and configured:
+
+- summaries can use OpenAI
+- sidebar auto-route can classify capture text as `note`, `task`, or `journal`
+
+If AI is enabled but unavailable, the plugin falls back instead of crashing.
 
 ## Development
 
@@ -101,13 +180,17 @@ npm test
 npm run build
 ```
 
-`npm test` runs a small smoke-test script that checks settings normalization, date formatting, and fallback summary output.
+`npm test` runs a small smoke-test suite for settings normalization, date formatting, inbox parsing, review-log parsing, and summary formatting.
 
 ## Privacy
 
-- All user content stays in the vault as markdown files.
-- OpenAI requests are only made when AI settings are enabled and an API key is present.
-- The plugin does not use embeddings, a vector database, or a backend service.
+- all user content stays in the vault as markdown files
+- OpenAI requests are only made when AI settings are enabled and configured
+- the plugin does not use embeddings, a vector database, or a backend service
+
+## Status
+
+This repository is currently a focused MVP with iterative polish on top. The design goal is to stay simple and extensible without overengineering the core workflow.
 
 ## License
 
