@@ -4,6 +4,8 @@ Brain is a markdown-first Obsidian plugin for fast capture, inbox review, daily 
 
 It is built around a simple rule: your vault stays the source of truth. Notes, tasks, journal entries, summaries, and review logs all live in normal markdown files inside Obsidian. AI is optional and the core workflow still works without it.
 
+The longer-term direction is to make Brain feel like a lightweight LLM wiki for the vault: not just a place to store markdown, but a way to query, synthesize, and reshape your notes into better knowledge artifacts.
+
 ## What It Does
 
 - capture quick notes into `Brain/inbox.md`
@@ -24,6 +26,13 @@ Most AI note tools move too quickly toward opaque workflows, hidden storage, or 
 - the architecture stays simple
 - the workflow is optimized for low-friction daily use
 
+Brain is meant to grow toward a stronger promise than capture alone:
+
+- capture raw thoughts quickly
+- select vault context deliberately
+- ask Brain to synthesize or rewrite it
+- keep the result as markdown you actually own
+
 ## Current Scope
 
 Brain is intentionally small. It is not trying to be:
@@ -34,6 +43,26 @@ Brain is intentionally small. It is not trying to be:
 - a replacement for your vault structure
 
 The focus is capture, review, and summary.
+
+## Product Direction
+
+The current release is the foundation layer:
+
+- fast capture
+- inbox review
+- journaling
+- markdown summaries
+
+The next product step is to make Brain more obviously useful as an LLM wiki for Obsidian.
+
+That means adding focused workflows like:
+
+- ask Brain about the current note
+- ask Brain about selected text
+- synthesize recent notes into a cleaner artifact
+- turn scattered markdown into more structured knowledge
+
+The goal is not generic chat. The goal is useful markdown output over explicit vault context.
 
 ## Commands
 
@@ -172,6 +201,8 @@ With AI enabled and configured:
 
 If AI is enabled but unavailable, the plugin falls back instead of crashing.
 
+The intended direction for AI is synthesis over vault context, not autonomous behavior. Brain should help interpret and reshape your notes, not take over your workflow.
+
 ## Development
 
 ```bash
@@ -191,6 +222,12 @@ npm run build
 ## Status
 
 This repository is currently a focused MVP with iterative polish on top. The design goal is to stay simple and extensible without overengineering the core workflow.
+
+Current status:
+
+- the capture, review, journal, and summary workflows are usable now
+- the plugin is still early and intentionally narrow
+- the next major iteration is planned around `Query + Synthesis`
 
 ## License
 
