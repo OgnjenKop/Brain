@@ -38,6 +38,10 @@ export function buildFallbackSummary(content: string): string {
       continue;
     }
 
+    if (/^<!--\s*brain-reviewed:/i.test(line)) {
+      continue;
+    }
+
     const heading = line.match(/^#{1,6}\s+(.+)$/);
     if (heading) {
       highlights.add(cleanSummaryLine(heading[1]));
@@ -54,7 +58,7 @@ export function buildFallbackSummary(content: string): string {
 
     const bullet = line.match(/^[-*+]\s+(?!\[( |x|X)\]\s+)(.+)$/);
     if (bullet) {
-      const text = cleanSummaryLine(bullet[1]);
+      const text = cleanSummaryLine(bullet[2]);
       if (text) {
         highlights.add(text);
       }

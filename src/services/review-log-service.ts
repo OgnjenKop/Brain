@@ -13,6 +13,11 @@ export interface ReviewLogEntry extends InboxEntryIdentity {
 }
 
 export class ReviewLogService {
+  private readonly reviewEntryCountCache = new Map<string, {
+    mtime: number;
+    count: number;
+  }>();
+
   constructor(
     private readonly vaultService: VaultService,
     private readonly settingsProvider: () => BrainPluginSettings,
@@ -34,6 +39,7 @@ export class ReviewLogService {
     ].join("\n");
 
     await this.vaultService.appendText(path, content);
+    this.reviewEntryCountCache.delete(path);
     return { path };
   }
 
@@ -63,7 +69,34 @@ export class ReviewLogService {
   }
 
   async getReviewEntryCount(): Promise<number> {
-    return (await this.getReviewEntries()).length;
+    const logs = await this.getReviewLogFiles();
+    const seenPaths = new Set<string>();
+    let total = 0;
+
+    for (const file of logs) {
+      seenPaths.add(file.path);
+      const cached = this.reviewEntryCountCache.get(file.path);
+      if (cached && cached.mtime === file.stat.mtime) {
+        total += cached.count;
+        continue;
+      }
+
+      const content = await this.vaultService.readText(file.path);
+      const count = parseReviewLogEntries(content, file.path, file.stat.mtime).length;
+      this.reviewEntryCountCache.set(file.path, {
+        mtime: file.stat.mtime,
+        count,
+      });
+      total += count;
+    }
+
+    for (const path of this.reviewEntryCountCache.keys()) {
+      if (!seenPaths.has(path)) {
+        this.reviewEntryCountCache.delete(path);
+      }
+    }
+
+    return total;
   }
 }
 

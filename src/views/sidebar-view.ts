@@ -1,6 +1,5 @@
 import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import BrainPlugin from "../../main";
-import { PromptModal } from "./prompt-modals";
 
 export const BRAIN_VIEW_TYPE = "brain-sidebar-view";
 
@@ -37,12 +36,15 @@ export class BrainSidebarView extends ItemView {
     const header = this.contentEl.createEl("div", { cls: "brain-header" });
     header.createEl("h2", { text: "Brain" });
     header.createEl("p", {
-      text: "Quick capture, daily journaling, and lightweight summaries.",
+      text: "Capture ideas, synthesize explicit context, and save durable markdown artifacts.",
     });
 
     this.createCaptureSection();
+    this.createTopicPageSection();
+    this.createSynthesisSection();
+    this.createAskSection();
     this.createReviewSection();
-    this.createAiSection();
+    this.createCaptureAssistSection();
     this.createStatusSection();
     this.createOutputSection();
     await this.refreshStatus();
@@ -61,16 +63,18 @@ export class BrainSidebarView extends ItemView {
   }
 
   async refreshStatus(): Promise<void> {
+    const [inboxCount, taskCount, reviewCount] = await Promise.all([
+      this.plugin.getInboxCount(),
+      this.plugin.getOpenTaskCount(),
+      this.plugin.getReviewHistoryCount(),
+    ]);
     if (this.inboxCountEl) {
-      const inboxCount = await this.plugin.getInboxCount();
-      this.inboxCountEl.setText(`${inboxCount} recent entries`);
+      this.inboxCountEl.setText(`${inboxCount} unreviewed entries`);
     }
     if (this.taskCountEl) {
-      const taskCount = await this.plugin.getOpenTaskCount();
       this.taskCountEl.setText(`${taskCount} open tasks`);
     }
     if (this.reviewHistoryEl) {
-      const reviewCount = await this.plugin.getReviewHistoryCount();
       this.reviewHistoryEl.setText(`Review history: ${reviewCount} logs`);
     }
     if (this.aiStatusEl) {
@@ -86,6 +90,9 @@ export class BrainSidebarView extends ItemView {
       cls: "brain-section",
     });
     section.createEl("h3", { text: "Quick Capture" });
+    section.createEl("p", {
+      text: "Capture rough input into the vault before review and synthesis.",
+    });
 
     this.inputEl = section.createEl("textarea", {
       cls: "brain-capture-input",
@@ -98,19 +105,19 @@ export class BrainSidebarView extends ItemView {
     const buttons = section.createEl("div", { cls: "brain-button-row" });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Save as Note",
+      text: "Capture Note",
     }).addEventListener("click", () => {
       void this.saveAsNote();
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Save as Task",
+      text: "Capture Task",
     }).addEventListener("click", () => {
       void this.saveAsTask();
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Save as Journal",
+      text: "Capture Journal",
     }).addEventListener("click", () => {
       void this.saveAsJournal();
     });
@@ -123,16 +130,85 @@ export class BrainSidebarView extends ItemView {
     });
   }
 
+  private createSynthesisSection(): void {
+    const section = this.contentEl.createEl("section", {
+      cls: "brain-section",
+    });
+    section.createEl("h3", { text: "Synthesize" });
+    section.createEl("p", {
+      text: "Turn explicit context into summaries, clean notes, tasks, and briefs.",
+    });
+
+    const buttons = section.createEl("div", { cls: "brain-button-row" });
+    buttons.createEl("button", {
+      cls: "brain-button brain-button-primary",
+      text: "Summarize Note",
+    }).addEventListener("click", () => {
+      void this.plugin.askAboutCurrentNote();
+    });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "Synthesize Note...",
+    }).addEventListener("click", () => {
+      void this.plugin.askAboutCurrentNoteWithTemplate();
+    });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "Extract Tasks",
+    }).addEventListener("click", () => {
+      void this.plugin.askAboutSelection();
+    });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "Draft Brief",
+    }).addEventListener("click", () => {
+      void this.plugin.askAboutCurrentFolder();
+    });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "Clean Recent Files",
+    }).addEventListener("click", () => {
+      void this.plugin.askAboutRecentFiles();
+    });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "Synthesize Notes...",
+    }).addEventListener("click", () => {
+      void this.plugin.synthesizeNotes();
+    });
+  }
+
+  private createAskSection(): void {
+    const section = this.contentEl.createEl("section", {
+      cls: "brain-section",
+    });
+    section.createEl("h3", { text: "Ask" });
+    section.createEl("p", {
+      text: "Ask evidence-based questions over one note, a folder, a note group, or the vault.",
+    });
+
+    const buttons = section.createEl("div", { cls: "brain-button-row" });
+    buttons.createEl("button", {
+      cls: "brain-button brain-button-primary",
+      text: "Ask Question",
+    }).addEventListener("click", () => {
+      void this.plugin.askQuestion();
+    });
+  }
+
   private createReviewSection(): void {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
     });
     section.createEl("h3", { text: "Review" });
+    section.createEl("p", {
+      text: "Process captured input and keep the daily loop moving.",
+    });
 
     const buttons = section.createEl("div", { cls: "brain-button-row" });
     buttons.createEl("button", {
       cls: "brain-button brain-button-primary",
-      text: "Process Inbox",
+      text: "Review Inbox",
     }).addEventListener("click", () => {
       void this.plugin.processInbox();
     });
@@ -144,40 +220,62 @@ export class BrainSidebarView extends ItemView {
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Summarize Today",
+      text: "Create Today Summary",
     }).addEventListener("click", () => {
       void this.plugin.generateSummaryForWindow(1, "Today");
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Summarize Week",
+      text: "Create Weekly Summary",
     }).addEventListener("click", () => {
       void this.plugin.generateSummaryForWindow(7, "Week");
     });
   }
 
-  private createAiSection(): void {
+  private createTopicPageSection(): void {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
     });
-    section.createEl("h3", { text: "AI Actions" });
+    section.createEl("h3", { text: "Topic Pages" });
+    section.createEl("p", {
+      text: "Brain’s flagship flow: turn explicit context into a durable markdown page you can keep building.",
+    });
 
     const buttons = section.createEl("div", { cls: "brain-button-row" });
     buttons.createEl("button", {
       cls: "brain-button brain-button-primary",
-      text: "Summarize",
+      text: "Create Topic Page",
     }).addEventListener("click", () => {
-      void this.generateSummary();
+      void this.plugin.createTopicPage();
+    });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "From Current Note",
+    }).addEventListener("click", () => {
+      void this.plugin.createTopicPageForScope("note");
+    });
+  }
+
+  private createCaptureAssistSection(): void {
+    if (!this.plugin.settings.enableAIRouting) {
+      return;
+    }
+
+    const section = this.contentEl.createEl("section", {
+      cls: "brain-section",
+    });
+    section.createEl("h3", { text: "Capture Assist" });
+    section.createEl("p", {
+      text: "Use AI only to classify fresh capture into note, task, or journal.",
     });
 
-    if (this.plugin.settings.enableAIRouting) {
-      buttons.createEl("button", {
-        cls: "brain-button",
-        text: "Auto-route",
-      }).addEventListener("click", () => {
-        void this.autoRoute();
-      });
-    }
+    const buttons = section.createEl("div", { cls: "brain-button-row" });
+    buttons.createEl("button", {
+      cls: "brain-button",
+      text: "Auto-route Capture",
+    }).addEventListener("click", () => {
+      void this.autoRoute();
+    });
   }
 
   private createStatusSection(): void {
@@ -204,7 +302,7 @@ export class BrainSidebarView extends ItemView {
     const aiRow = section.createEl("p", { text: "AI: loading..." });
     this.aiStatusEl = aiRow;
 
-    const summaryRow = section.createEl("p", { text: "Last summary: loading..." });
+    const summaryRow = section.createEl("p", { text: "Last artifact: loading..." });
     this.summaryStatusEl = summaryRow;
   }
 
@@ -212,25 +310,25 @@ export class BrainSidebarView extends ItemView {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
     });
-    section.createEl("h3", { text: "Output" });
+    section.createEl("h3", { text: "Artifacts" });
 
-    section.createEl("h4", { text: "Last Result" });
+    section.createEl("h4", { text: "Last Action" });
     this.resultEl = section.createEl("pre", {
       cls: "brain-output",
       text: "No recent action.",
     });
 
-    section.createEl("h4", { text: "Last Summary" });
+    section.createEl("h4", { text: "Last Artifact" });
     this.summaryEl = section.createEl("pre", {
       cls: "brain-output",
-      text: "No summary generated yet.",
+      text: "No artifact generated yet.",
     });
   }
 
   private async saveAsNote(): Promise<void> {
     await this.executeCapture(
       (text) => this.plugin.captureNote(text),
-      "Could not save note",
+      "Could not capture note",
     );
   }
 
@@ -246,19 +344,6 @@ export class BrainSidebarView extends ItemView {
       (text) => this.plugin.captureJournal(text),
       "Could not save journal entry",
     );
-  }
-
-  private async generateSummary(): Promise<void> {
-    try {
-      const result = await this.plugin.summarizeNow();
-      this.summaryEl.setText(result.content);
-      this.setLastResult(
-        result.usedAI ? "AI summary generated" : "Local summary generated",
-      );
-    } catch (error) {
-      console.error(error);
-      new Notice("Could not generate summary");
-    }
   }
 
   private async autoRoute(): Promise<void> {
@@ -277,7 +362,7 @@ export class BrainSidebarView extends ItemView {
       if (route === "note") {
         await this.executeCapture(
           () => this.plugin.captureNote(text),
-          "Could not save note",
+          "Could not capture note",
         );
       } else if (route === "task") {
         await this.executeCapture(

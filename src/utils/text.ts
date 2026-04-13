@@ -1,6 +1,5 @@
 import { TFile } from "obsidian";
 import { VaultService } from "../services/vault-service";
-import { buildFallbackSummary } from "./summary-format";
 
 export async function joinRecentFilesForSummary(
   vaultService: VaultService,

@@ -1,6 +1,15 @@
 import { BrainPluginSettings } from "../settings/settings";
 import { formatDateTimeKey } from "../utils/date";
-import { VaultService } from "./vault-service";
+
+export interface InboxVaultService {
+  readText(filePath: string): Promise<string>;
+  readTextWithMtime(filePath: string): Promise<{
+    text: string;
+    mtime: number;
+    exists: boolean;
+  }>;
+  replaceText(filePath: string, content: string): Promise<unknown>;
+}
 
 export interface InboxEntry {
   heading: string;
@@ -24,8 +33,13 @@ export type InboxEntryIdentity = Pick<
   Partial<Pick<InboxEntry, "raw" | "startLine" | "endLine">>;
 
 export class InboxService {
+  private unreviewedCountCache: {
+    mtime: number;
+    count: number;
+  } | null = null;
+
   constructor(
-    private readonly vaultService: VaultService,
+    private readonly vaultService: InboxVaultService,
     private readonly settingsProvider: () => BrainPluginSettings,
   ) {}
 
@@ -37,6 +51,29 @@ export class InboxService {
     return filtered.slice(-limit).reverse();
   }
 
+  async getUnreviewedCount(): Promise<number> {
+    const settings = this.settingsProvider();
+    const { text, mtime, exists } = await this.vaultService.readTextWithMtime(settings.inboxFile);
+    if (!exists) {
+      this.unreviewedCountCache = {
+        mtime: 0,
+        count: 0,
+      };
+      return 0;
+    }
+
+    if (this.unreviewedCountCache && this.unreviewedCountCache.mtime === mtime) {
+      return this.unreviewedCountCache.count;
+    }
+
+    const count = parseInboxEntries(text).filter((entry) => !entry.reviewed).length;
+    this.unreviewedCountCache = {
+      mtime,
+      count,
+    };
+    return count;
+  }
+
   async markEntryReviewed(entry: InboxEntryIdentity, action: string): Promise<boolean> {
     const settings = this.settingsProvider();
     const content = await this.vaultService.readText(settings.inboxFile);
@@ -44,6 +81,7 @@ export class InboxService {
     const currentEntry =
       currentEntries.find(
         (candidate) =>
+          !candidate.reviewed &&
           candidate.signature === entry.signature &&
           candidate.signatureIndex === entry.signatureIndex,
       ) ??
@@ -67,7 +105,11 @@ export class InboxService {
     }
 
     const updated = insertReviewMarker(content, currentEntry, action);
+    if (updated === content) {
+      return false;
+    }
     await this.vaultService.replaceText(settings.inboxFile, updated);
+    this.unreviewedCountCache = null;
     return true;
   }
 
@@ -78,12 +120,14 @@ export class InboxService {
     const currentEntry =
       currentEntries.find(
         (candidate) =>
+          candidate.reviewed &&
           candidate.signature === entry.signature &&
           candidate.signatureIndex === entry.signatureIndex,
       ) ??
-      currentEntries.find((candidate) => candidate.signature === entry.signature) ??
+      findUniqueReviewedSignatureMatch(currentEntries, entry.signature) ??
       currentEntries.find(
         (candidate) =>
+          candidate.reviewed &&
           candidate.heading === entry.heading &&
           candidate.body === entry.body &&
           candidate.preview === entry.preview,
@@ -94,7 +138,11 @@ export class InboxService {
     }
 
     const updated = removeReviewMarker(content, currentEntry);
+    if (updated === content) {
+      return false;
+    }
     await this.vaultService.replaceText(settings.inboxFile, updated);
+    this.unreviewedCountCache = null;
     return true;
   }
 }
@@ -233,4 +281,17 @@ function trimTrailingBlankLines(lines: string[]): string[] {
     clone.pop();
   }
   return clone;
+}
+
+function findUniqueReviewedSignatureMatch(
+  entries: InboxEntry[],
+  signature: string,
+): InboxEntry | null {
+  const reviewedMatches = entries.filter(
+    (entry) => entry.reviewed && entry.signature === signature,
+  );
+  if (reviewedMatches.length !== 1) {
+    return null;
+  }
+  return reviewedMatches[0];
 }

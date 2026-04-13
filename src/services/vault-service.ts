@@ -61,6 +61,27 @@ export class VaultService {
     return this.app.vault.read(file);
   }
 
+  async readTextWithMtime(filePath: string): Promise<{
+    text: string;
+    mtime: number;
+    exists: boolean;
+  }> {
+    const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
+    if (!(file instanceof TFile)) {
+      return {
+        text: "",
+        mtime: 0,
+        exists: false,
+      };
+    }
+
+    return {
+      text: await this.app.vault.read(file),
+      mtime: file.stat.mtime,
+      exists: true,
+    };
+  }
+
   async appendText(filePath: string, content: string): Promise<TFile> {
     const file = await this.ensureFile(filePath);
     const current = await this.app.vault.read(file);
