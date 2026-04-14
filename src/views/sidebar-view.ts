@@ -75,7 +75,7 @@ export class BrainSidebarView extends ItemView {
       this.taskCountEl.setText(`${taskCount} open tasks`);
     }
     if (this.reviewHistoryEl) {
-      this.reviewHistoryEl.setText(`Review history: ${reviewCount} logs`);
+      this.reviewHistoryEl.setText(`Review history: ${reviewCount} entries`);
     }
     if (this.aiStatusEl) {
       this.aiStatusEl.setText(this.plugin.getAiStatusText());
@@ -142,31 +142,31 @@ export class BrainSidebarView extends ItemView {
     const buttons = section.createEl("div", { cls: "brain-button-row" });
     buttons.createEl("button", {
       cls: "brain-button brain-button-primary",
-      text: "Summarize Note",
+      text: "Summarize Current Note",
     }).addEventListener("click", () => {
       void this.plugin.askAboutCurrentNote();
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Synthesize Note...",
+      text: "Synthesize Current Note...",
     }).addEventListener("click", () => {
       void this.plugin.askAboutCurrentNoteWithTemplate();
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Extract Tasks",
+      text: "Extract Tasks From Selection",
     }).addEventListener("click", () => {
       void this.plugin.askAboutSelection();
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Draft Brief",
+      text: "Draft Brief From Folder",
     }).addEventListener("click", () => {
       void this.plugin.askAboutCurrentFolder();
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "Clean Recent Files",
+      text: "Clean Note From Recent Files",
     }).addEventListener("click", () => {
       void this.plugin.askAboutRecentFiles();
     });
@@ -182,15 +182,15 @@ export class BrainSidebarView extends ItemView {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
     });
-    section.createEl("h3", { text: "Ask" });
+    section.createEl("h3", { text: "Ask Brain" });
     section.createEl("p", {
-      text: "Ask evidence-based questions over one note, a folder, a note group, or the vault.",
+      text: "Ask a question about the current note, a selected group, a folder, or the whole vault.",
     });
 
     const buttons = section.createEl("div", { cls: "brain-button-row" });
     buttons.createEl("button", {
       cls: "brain-button brain-button-primary",
-      text: "Ask Question",
+      text: "Ask Question...",
     }).addEventListener("click", () => {
       void this.plugin.askQuestion();
     });
@@ -250,7 +250,7 @@ export class BrainSidebarView extends ItemView {
     });
     buttons.createEl("button", {
       cls: "brain-button",
-      text: "From Current Note",
+      text: "Topic Page From Current Note",
     }).addEventListener("click", () => {
       void this.plugin.createTopicPageForScope("note");
     });
@@ -312,10 +312,10 @@ export class BrainSidebarView extends ItemView {
     });
     section.createEl("h3", { text: "Artifacts" });
 
-    section.createEl("h4", { text: "Last Action" });
+    section.createEl("h4", { text: "Last Result" });
     this.resultEl = section.createEl("pre", {
       cls: "brain-output",
-      text: "No recent action.",
+      text: "No result yet.",
     });
 
     section.createEl("h4", { text: "Last Artifact" });

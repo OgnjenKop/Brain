@@ -17,6 +17,14 @@ export class ReviewLogService {
     mtime: number;
     count: number;
   }>();
+  private reviewLogFilesCache: {
+    mtime: number;
+    files: TFile[];
+  } | null = null;
+  private reviewEntryTotalCache: {
+    listingMtime: number;
+    total: number;
+  } | null = null;
 
   constructor(
     private readonly vaultService: VaultService,
@@ -39,17 +47,29 @@ export class ReviewLogService {
     ].join("\n");
 
     await this.vaultService.appendText(path, content);
-    this.reviewEntryCountCache.delete(path);
+    this.reviewEntryCountCache.clear();
+    this.reviewLogFilesCache = null;
+    this.reviewEntryTotalCache = null;
     return { path };
   }
 
   async getReviewLogFiles(limit?: number): Promise<TFile[]> {
     const settings = this.settingsProvider();
-    const files = await this.vaultService.listMarkdownFiles();
-    const matching = files
-      .filter((file) => isUnderFolder(file.path, settings.reviewsFolder))
-      .sort((left, right) => right.stat.mtime - left.stat.mtime)
-    return typeof limit === "number" ? matching.slice(0, limit) : matching;
+
+    if (!this.reviewLogFilesCache) {
+      const allFiles = await this.vaultService.listMarkdownFiles();
+      const matching = allFiles
+        .filter((file) => isUnderFolder(file.path, settings.reviewsFolder))
+        .sort((left, right) => right.stat.mtime - left.stat.mtime);
+      this.reviewLogFilesCache = {
+        mtime: matching[0]?.stat.mtime ?? 0,
+        files: matching,
+      };
+    }
+
+    return typeof limit === "number"
+      ? this.reviewLogFilesCache.files.slice(0, limit)
+      : this.reviewLogFilesCache.files;
   }
 
   async getReviewEntries(limit?: number): Promise<ReviewLogEntry[]> {
@@ -70,24 +90,51 @@ export class ReviewLogService {
 
   async getReviewEntryCount(): Promise<number> {
     const logs = await this.getReviewLogFiles();
+    if (logs.length === 0) {
+      this.reviewEntryTotalCache = { listingMtime: 0, total: 0 };
+      return 0;
+    }
+
+    const listingMtime = logs[0].stat.mtime;
+    if (this.reviewEntryTotalCache?.listingMtime === listingMtime) {
+      return this.reviewEntryTotalCache.total;
+    }
+
     const seenPaths = new Set<string>();
     let total = 0;
 
-    for (const file of logs) {
-      seenPaths.add(file.path);
+    const uncachedFiles = logs.filter((file) => {
       const cached = this.reviewEntryCountCache.get(file.path);
-      if (cached && cached.mtime === file.stat.mtime) {
-        total += cached.count;
-        continue;
-      }
+      return !(cached && cached.mtime === file.stat.mtime);
+    });
 
-      const content = await this.vaultService.readText(file.path);
-      const count = parseReviewLogEntries(content, file.path, file.stat.mtime).length;
-      this.reviewEntryCountCache.set(file.path, {
-        mtime: file.stat.mtime,
-        count,
-      });
-      total += count;
+    const cachedFiles = logs.filter((file) => {
+      const cached = this.reviewEntryCountCache.get(file.path);
+      return cached && cached.mtime === file.stat.mtime;
+    });
+
+    for (const file of cachedFiles) {
+      seenPaths.add(file.path);
+      total += this.reviewEntryCountCache.get(file.path)!.count;
+    }
+
+    if (uncachedFiles.length > 0) {
+      const results = await Promise.all(
+        uncachedFiles.map(async (file) => {
+          const content = await this.vaultService.readText(file.path);
+          const count = parseReviewLogEntries(content, file.path, file.stat.mtime).length;
+          this.reviewEntryCountCache.set(file.path, {
+            mtime: file.stat.mtime,
+            count,
+          });
+          return { file, count };
+        }),
+      );
+
+      for (const { file, count } of results) {
+        seenPaths.add(file.path);
+        total += count;
+      }
     }
 
     for (const path of this.reviewEntryCountCache.keys()) {
@@ -96,6 +143,7 @@ export class ReviewLogService {
       }
     }
 
+    this.reviewEntryTotalCache = { listingMtime, total };
     return total;
   }
 }

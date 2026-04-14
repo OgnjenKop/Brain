@@ -221,7 +221,7 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "ask-question",
-      name: "Brain: Ask Question Across Notes",
+      name: "Brain: Ask Question",
       callback: async () => {
         await this.askQuestion();
       },
@@ -229,7 +229,7 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "ask-question-current-note",
-      name: "Brain: Ask Question From Current Note",
+      name: "Brain: Ask Question About Current Note",
       callback: async () => {
         await this.askQuestionAboutCurrentNote();
       },
@@ -370,7 +370,7 @@ export default class BrainPlugin extends Plugin {
   async askAboutRecentFiles(): Promise<void> {
     await this.askBrainForContext(
       () => this.contextService.getRecentFilesContext(),
-      "Create Clean Note From Recent Files",
+      "Clean Note From Recent Files",
       "rewrite-clean-note",
     );
   }
@@ -378,7 +378,7 @@ export default class BrainPlugin extends Plugin {
   async askAboutCurrentFolder(): Promise<void> {
     await this.askBrainForContext(
       () => this.contextService.getCurrentFolderContext(),
-      "Draft Project Brief From Current Folder",
+      "Draft Brief From Current Folder",
       "draft-project-brief",
     );
   }

@@ -33,7 +33,6 @@ The core promise is simple:
 - ask Brain a freeform question about one note, a group of notes, a directory, or the entire vault
 - create durable topic pages from an explicit topic and vault context
 - vault-wide questions exclude Brain-generated summaries and review logs to avoid recursion
-- choose between summarize, task extraction, clean-note rewriting, and project-brief drafting
 - choose between summarize, task extraction, decision extraction, open-question extraction, clean-note rewriting, and project-brief drafting
 - OpenAI summaries and sidebar auto-routing when configured
 - command palette actions plus a persistent sidebar
@@ -70,8 +69,8 @@ All paths are configurable in settings.
 - `Brain: Open Today's Journal`
 - `Brain: Synthesize Notes`
 - `Brain: Synthesize Current Note`
-- `Brain: Ask Question Across Notes`
-- `Brain: Ask Question From Current Note`
+- `Brain: Ask Question`
+- `Brain: Ask Question About Current Note`
 - `Brain: Create Topic Page`
 - `Brain: Create Topic Page From Current Note`
 - `Brain: Open Brain Sidebar`
@@ -84,16 +83,16 @@ It includes:
 
 - quick capture into inbox, tasks, or journal
 - topic-page creation as the signature artifact flow
-- synthesis actions for current note, selection, folder, recent files, or picked notes
-- a scoped question flow for one note, a group of notes, a directory, or the entire vault
-- topic page creation from one note, a group of notes, a directory, or the entire vault
+- synthesis actions: summarize current note, synthesize current note with template picker, extract tasks from selection, draft brief from folder, clean note from recent files, or synthesize selected notes
+- a scoped question flow for the current note, a selected group, a folder, or the entire vault
+- topic page creation from the current note, a selected group, a folder, or the entire vault
 - fast default outputs for common jobs plus a choose-template path for current note and picked notes
-- template picker for summarize, task extraction, decision extraction, open-question extraction, clean-note rewriting, and project-brief drafting
+- template picker for summarize, extract tasks, extract decisions, extract open questions, rewrite as clean note, and draft project brief
 - scope picker for synthesis, questions, and topic pages
 - review actions for inbox processing, journal access, and time-window summaries
 - optional capture auto-routing when AI routing is enabled
 - status for inbox, tasks, AI, review history, and last artifact
-- output panels for the latest action and artifact
+- output panels for the latest result and last artifact
 
 ## Inbox Review
 
@@ -206,7 +205,7 @@ npm test
 npm run build
 ```
 
-`npm test` runs a smoke-test suite covering settings normalization, date formatting, inbox parsing, review-log parsing, summary formatting, and synthesis output formatting.
+`npm test` runs a smoke-test suite covering settings normalization, date formatting, inbox/review-log parsing, synthesis template formatting and normalization, context formatting, and behavior-level count/cache paths.
 
 ## Privacy
 

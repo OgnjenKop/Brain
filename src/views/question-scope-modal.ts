@@ -35,22 +35,22 @@ export class QuestionScopeModal extends Modal {
 
     new Setting(contentEl)
       .addButton((button) =>
-        button.setButtonText("One note").setCta().onClick(() => {
+        button.setButtonText("Current Note").setCta().onClick(() => {
           this.finish("note");
         }),
       )
       .addButton((button) =>
-        button.setButtonText("Group of notes").onClick(() => {
+        button.setButtonText("Selected Notes").onClick(() => {
           this.finish("group");
         }),
       )
       .addButton((button) =>
-        button.setButtonText("Directory").onClick(() => {
+        button.setButtonText("Current Folder").onClick(() => {
           this.finish("folder");
         }),
       )
       .addButton((button) =>
-        button.setButtonText("Entire vault").onClick(() => {
+        button.setButtonText("Entire Vault").onClick(() => {
           this.finish("vault");
         }),
       );
