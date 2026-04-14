@@ -133,10 +133,10 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "add-journal-entry",
-      name: "Brain: Capture Journal Entry",
+      name: "Brain: Capture Journal",
       callback: async () => {
         await this.captureFromModal(
-          "Capture Journal Entry",
+          "Capture Journal",
           "Capture",
           async (text) => {
             const saved = await this.journalService.appendEntry(text);
@@ -165,7 +165,7 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "summarize-today",
-      name: "Brain: Create Today Summary",
+      name: "Brain: Generate Today Summary",
       callback: async () => {
         await this.generateSummaryForWindow(1, "Today");
       },
@@ -173,7 +173,7 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "summarize-this-week",
-      name: "Brain: Create Weekly Summary",
+      name: "Brain: Generate Weekly Summary",
       callback: async () => {
         await this.generateSummaryForWindow(7, "Week");
       },
@@ -237,7 +237,7 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "create-topic-page",
-      name: "Brain: Create Topic Page",
+      name: "Brain: Generate Topic Page",
       callback: async () => {
         await this.createTopicPage();
       },
@@ -245,7 +245,7 @@ export default class BrainPlugin extends Plugin {
 
     this.addCommand({
       id: "create-topic-page-current-note",
-      name: "Brain: Create Topic Page From Current Note",
+      name: "Brain: Generate Topic Page From Current Note",
       callback: async () => {
         await this.createTopicPageForScope("note");
       },

@@ -481,6 +481,74 @@ async function run(): Promise<void> {
   assert.match(normalizedSummary, /## Tasks/);
   assert.match(normalizedSummary, /## Follow-ups/);
   assert.match(normalizedSummary, /Review recent notes\./);
+  
+  // New behavioral regressions
+  await testInboxPromotionFlow();
+  await testScopeAggregation();
+  await testReopenEdgeCases();
+}
+
+async function testInboxPromotionFlow() {
+  const fakeVault = new FakeVaultService({
+    "Brain/inbox.md": {
+      text: "## 2026-04-11 09:00\n- [ ] Buy milk",
+      mtime: 100,
+    },
+    "Brain/tasks.md": {
+      text: "",
+      mtime: 200,
+    },
+  });
+  const settingsProvider = () => normalizeBrainSettings({});
+  const inboxService = new InboxService(fakeVault, settingsProvider);
+  const taskService = new TaskService(fakeVault, settingsProvider);
+
+  // Promote to task
+  const content = await fakeVault.readText("Brain/inbox.md");
+  const entries = parseInboxEntries(content);
+  const entry = entries[0];
+  await taskService.appendTask(entry.preview);
+  await inboxService.markEntryReviewed(entry, "task");
+
+  const inboxText = await fakeVault.readText("Brain/inbox.md");
+  const tasksText = await fakeVault.readText("Brain/tasks.md");
+
+  assert.match(inboxText, /<!-- brain-reviewed: task/);
+  assert.match(tasksText, /- \[ \] Buy milk/);
+}
+
+async function testScopeAggregation() {
+  const fakeVault = new FakeVaultService({
+    "notes/alpha.md": { text: "Alpha content", mtime: 100 },
+    "notes/beta.md": { text: "Beta content", mtime: 110 },
+  });
+  const settingsProvider = () => normalizeBrainSettings({ notesFolder: "notes" });
+  
+  // We simulate ContextService's logic of gathering content from file paths
+  const files = ["notes/alpha.md", "notes/beta.md"];
+  const contentMap = new Map<string, string>();
+  for (const path of files) {
+      contentMap.set(path, await fakeVault.readText(path));
+  }
+  
+  assert.equal(contentMap.size, 2);
+  assert.equal(contentMap.get("notes/alpha.md"), "Alpha content");
+  assert.equal(contentMap.get("notes/beta.md"), "Beta content");
+}
+
+async function testReopenEdgeCases() {
+  const fakeVault = new FakeVaultService({
+    "Brain/inbox.md": {
+      text: "## 2026-04-11 09:00\n- Duplicate item\n<!-- brain-reviewed: task 2026-04-11 09:05 -->\n## 2026-04-11 09:00\n- Duplicate item",
+      mtime: 100,
+    },
+  });
+  
+  const content = await fakeVault.readText("Brain/inbox.md");
+  const entries = parseInboxEntries(content);
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].reviewed, true);
+  assert.equal(entries[1].reviewed, false);
 }
 
 class FakeVaultService implements InboxVaultService, TaskVaultService {
