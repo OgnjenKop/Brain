@@ -30,7 +30,7 @@ The core promise is simple:
 - review history with reopen support
 - daily and weekly markdown summaries with a local fallback summarizer
 - synthesis over the current note, selection, folder, recent files, or a chosen note group
-- ask Brain a freeform question about one note, a group of notes, a directory, or the entire vault
+- ask Brain a freeform question about the current note, a selected group, a folder, or the entire vault
 - create durable topic pages from an explicit topic and vault context
 - vault-wide questions exclude Brain-generated summaries and review logs to avoid recursion
 - choose between summarize, task extraction, decision extraction, open-question extraction, clean-note rewriting, and project-brief drafting
@@ -136,8 +136,7 @@ It turns chosen context into durable markdown in `Brain/notes/`.
 
 ## Roadmap
 
-The next release track is documented in `V4_ROADMAP.md`.
-It focuses on extraction quality, behavior-level regression coverage, and large-vault responsiveness while preserving Brain’s markdown-first product boundaries.
+The v0.4 release track is documented in `V4_ROADMAP.md`. Milestones 1 (extraction quality), 3 (large-vault responsiveness), and 4 (UX consistency) are shipped. Milestone 2 (behavior-level regression coverage) is next.
 
 ## Installation
 

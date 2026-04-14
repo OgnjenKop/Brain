@@ -6,7 +6,7 @@
 
 v0.4 keeps Brain markdown-first and vault-local. The goal is to make synthesis artifacts more reliable and the core sidebar loop more responsive in larger vaults.
 
-## Milestone 1: Extraction Quality
+## Milestone 1: Extraction Quality ✅
 
 - tighten prompt and fallback heuristics for:
   - decisions
@@ -30,7 +30,7 @@ Exit criteria:
 Exit criteria:
 - key user workflows (capture → review → synthesize → save/insert) have regression coverage on critical logic
 
-## Milestone 3: Large-Vault Responsiveness
+## Milestone 3: Large-Vault Responsiveness ✅
 
 - reduce repeated full-file parsing in frequently refreshed UI status paths
 - prefer mtime-aware caches for derived counts where correctness is deterministic
@@ -39,7 +39,7 @@ Exit criteria:
 Exit criteria:
 - status refresh remains responsive with large `inbox.md`, `tasks.md`, and review history
 
-## Milestone 4: UX Consistency
+## Milestone 4: UX Consistency ✅
 
 - align command names, sidebar labels, and template labels
 - ensure status text reflects real semantics (e.g. unreviewed vs recent)
