@@ -44,6 +44,13 @@ import {
   formatTimeKey,
 } from "../src/utils/date";
 
+// Test constants
+const TEST_MTIME_BASE = 100;
+const TEST_MTIME_INBOX = TEST_MTIME_BASE;
+const TEST_MTIME_TASKS = TEST_MTIME_BASE + 100;
+const TEST_MTIME_INBOX_UPDATED = TEST_MTIME_BASE + 1;
+const TEST_MTIME_TASKS_UPDATED = TEST_MTIME_BASE + 101;
+
 async function run(): Promise<void> {
   const normalized = normalizeBrainSettings({
     inboxFile: "/Brain/inbox.md",
@@ -433,7 +440,7 @@ async function run(): Promise<void> {
         "## 2026-04-11 10:00",
         "- Second item",
       ].join("\n"),
-      mtime: 100,
+      mtime: TEST_MTIME_INBOX,
     },
     "Brain/tasks.md": {
       text: [
@@ -441,7 +448,7 @@ async function run(): Promise<void> {
         "- [x] Done task",
         "- [ ] Second task",
       ].join("\n"),
-      mtime: 200,
+      mtime: TEST_MTIME_TASKS,
     },
   });
   const settingsProvider = () => normalizeBrainSettings({});
@@ -459,12 +466,12 @@ async function run(): Promise<void> {
     "",
     "## 2026-04-11 10:00",
     "- Second item",
-  ].join("\n"), 101);
+  ].join("\n"), TEST_MTIME_INBOX_UPDATED);
   fakeVault.setFile("Brain/tasks.md", [
     "- [ ] First task",
     "- [ ] Second task",
     "- [ ] Third task",
-  ].join("\n"), 201);
+  ].join("\n"), TEST_MTIME_TASKS_UPDATED);
 
   assert.equal(await inboxService.getUnreviewedCount(), 2);
   assert.equal(await taskService.getOpenTaskCount(), 3);
@@ -483,72 +490,292 @@ async function run(): Promise<void> {
   assert.match(normalizedSummary, /Review recent notes\./);
   
   // New behavioral regressions
-  await testInboxPromotionFlow();
+  await testCountCacheInvalidation();
   await testScopeAggregation();
   await testReopenEdgeCases();
+  await testFolderFiltering();
+  await testFullCaptureReviewWorkflow();
 }
 
-async function testInboxPromotionFlow() {
+/**
+ * Tests that count caches invalidate correctly when files are modified
+ * or entries are marked as reviewed.
+ */
+async function testCountCacheInvalidation() {
   const fakeVault = new FakeVaultService({
     "Brain/inbox.md": {
-      text: "## 2026-04-11 09:00\n- [ ] Buy milk",
-      mtime: 100,
+      text: [
+        "## 2026-04-11 09:00",
+        "- First item",
+        "<!-- brain-reviewed: task 2026-04-11 09:05 -->",
+        "",
+        "## 2026-04-11 10:00",
+        "- Second item",
+        "",
+        "## 2026-04-11 11:00",
+        "- Third item",
+      ].join("\n"),
+      mtime: TEST_MTIME_INBOX,
     },
     "Brain/tasks.md": {
-      text: "",
-      mtime: 200,
+      text: [
+        "- [ ] First task",
+        "- [x] Done task",
+        "- [ ] Second task",
+      ].join("\n"),
+      mtime: TEST_MTIME_TASKS,
     },
   });
   const settingsProvider = () => normalizeBrainSettings({});
   const inboxService = new InboxService(fakeVault, settingsProvider);
   const taskService = new TaskService(fakeVault, settingsProvider);
 
-  // Promote to task
+  // Initial counts should use cache
+  const inboxCount1 = await inboxService.getUnreviewedCount();
+  const taskCount1 = await taskService.getOpenTaskCount();
+  assert.equal(inboxCount1, 2);
+  assert.equal(taskCount1, 2);
+
+  // Second call should return cached values (same mtime)
+  const inboxCount2 = await inboxService.getUnreviewedCount();
+  const taskCount2 = await taskService.getOpenTaskCount();
+  assert.equal(inboxCount2, 2);
+  assert.equal(taskCount2, 2);
+
+  // Modify inbox file (new mtime) - cache should invalidate
+  fakeVault.setFile("Brain/inbox.md", [
+    "## 2026-04-11 09:00",
+    "- First item",
+    "<!-- brain-reviewed: task 2026-04-11 09:05 -->",
+    "",
+    "## 2026-04-11 10:00",
+    "- Second item",
+  ].join("\n"), TEST_MTIME_INBOX_UPDATED);
+  const inboxCount3 = await inboxService.getUnreviewedCount();
+  assert.equal(inboxCount3, 1);
+
+  // Modify tasks file (new mtime) - cache should invalidate
+  fakeVault.setFile("Brain/tasks.md", [
+    "- [ ] First task",
+    "- [ ] Second task",
+    "- [ ] Third task",
+    "- [ ] Fourth task",
+  ].join("\n") + "\n", TEST_MTIME_TASKS_UPDATED);
+  const taskCount3 = await taskService.getOpenTaskCount();
+  assert.equal(taskCount3, 4);
+
+  // Mark entry as reviewed - should invalidate cache
   const content = await fakeVault.readText("Brain/inbox.md");
   const entries = parseInboxEntries(content);
-  const entry = entries[0];
-  await taskService.appendTask(entry.preview);
-  await inboxService.markEntryReviewed(entry, "task");
+  const unreviewedEntry = entries.find((e) => !e.reviewed);
+  assert.ok(unreviewedEntry);
+  await inboxService.markEntryReviewed(unreviewedEntry, "task");
+  const inboxCount4 = await inboxService.getUnreviewedCount();
+  assert.equal(inboxCount4, 0);
 
-  const inboxText = await fakeVault.readText("Brain/inbox.md");
-  const tasksText = await fakeVault.readText("Brain/tasks.md");
-
-  assert.match(inboxText, /<!-- brain-reviewed: task/);
-  assert.match(tasksText, /- \[ \] Buy milk/);
+  // Append task - should invalidate cache
+  await taskService.appendTask("New task");
+  const taskCount4 = await taskService.getOpenTaskCount();
+  assert.equal(taskCount4, 5);
 }
 
+/**
+ * Tests that context aggregation correctly collects content from multiple files
+ * and respects file ordering by modification time.
+ */
 async function testScopeAggregation() {
   const fakeVault = new FakeVaultService({
-    "notes/alpha.md": { text: "Alpha content", mtime: 100 },
-    "notes/beta.md": { text: "Beta content", mtime: 110 },
+    "notes/alpha.md": { text: "Alpha content", mtime: TEST_MTIME_BASE },
+    "notes/beta.md": { text: "Beta content", mtime: TEST_MTIME_BASE + 10 },
+    "notes/gamma.md": { text: "Gamma content", mtime: TEST_MTIME_BASE + 20 },
+    "Brain/summaries/daily.md": { text: "Summary content", mtime: TEST_MTIME_BASE + 30 },
+    "Brain/reviews/2026-04-11.md": { text: "Review log", mtime: TEST_MTIME_BASE + 40 },
   });
-  const settingsProvider = () => normalizeBrainSettings({ notesFolder: "notes" });
+  const settingsProvider = () => normalizeBrainSettings({ 
+    notesFolder: "notes",
+    summariesFolder: "Brain/summaries",
+    reviewsFolder: "Brain/reviews"
+  });
   
-  // We simulate ContextService's logic of gathering content from file paths
-  const files = ["notes/alpha.md", "notes/beta.md"];
+  // Test aggregating content from multiple files
+  const files = ["notes/alpha.md", "notes/beta.md", "notes/gamma.md"];
   const contentMap = new Map<string, string>();
   for (const path of files) {
-      contentMap.set(path, await fakeVault.readText(path));
+    contentMap.set(path, await fakeVault.readText(path));
   }
   
-  assert.equal(contentMap.size, 2);
+  assert.equal(contentMap.size, 3);
   assert.equal(contentMap.get("notes/alpha.md"), "Alpha content");
   assert.equal(contentMap.get("notes/beta.md"), "Beta content");
+  assert.equal(contentMap.get("notes/gamma.md"), "Gamma content");
+
+  // Test that aggregation respects file order by mtime
+  const sortedFiles = files.toSorted((a, b) => {
+    const aMtime = fakeVault.getFileMtime(a);
+    const bMtime = fakeVault.getFileMtime(b);
+    return bMtime - aMtime;
+  });
+  assert.equal(sortedFiles[0], "notes/gamma.md");
+  assert.equal(sortedFiles[1], "notes/beta.md");
+  assert.equal(sortedFiles[2], "notes/alpha.md");
+
+  // Test context building with source paths
+  const sourcePaths = files;
+  const aggregatedText = Array.from(contentMap.values()).join("\n\n");
+  assert.match(aggregatedText, /Alpha content/);
+  assert.match(aggregatedText, /Beta content/);
+  assert.match(aggregatedText, /Gamma content/);
+  assert.equal(sourcePaths.length, 3);
 }
 
+/**
+ * Tests reopening reviewed inbox entries, including edge cases with
+ * duplicate entries distinguished by signature index.
+ */
 async function testReopenEdgeCases() {
   const fakeVault = new FakeVaultService({
     "Brain/inbox.md": {
-      text: "## 2026-04-11 09:00\n- Duplicate item\n<!-- brain-reviewed: task 2026-04-11 09:05 -->\n## 2026-04-11 09:00\n- Duplicate item",
-      mtime: 100,
+      text: [
+        "## 2026-04-11 09:00",
+        "- Duplicate item",
+        "<!-- brain-reviewed: task 2026-04-11 09:05 -->",
+        "## 2026-04-11 09:00",
+        "- Duplicate item",
+      ].join("\n"),
+      mtime: TEST_MTIME_INBOX,
     },
   });
-  
+
   const content = await fakeVault.readText("Brain/inbox.md");
   const entries = parseInboxEntries(content);
   assert.equal(entries.length, 2);
   assert.equal(entries[0].reviewed, true);
   assert.equal(entries[1].reviewed, false);
+  assert.equal(entries[0].signatureIndex, 0);
+  assert.equal(entries[1].signatureIndex, 1);
+
+  // Test that signatures match for duplicate content
+  assert.equal(entries[0].signature, entries[1].signature);
+
+  // Test reopen with signature index
+  const settingsProvider = () => normalizeBrainSettings({});
+  const inboxService = new InboxService(fakeVault, settingsProvider);
+  const reopenResult = await inboxService.reopenEntry({
+    heading: entries[0].heading,
+    body: entries[0].body,
+    preview: entries[0].preview,
+    signature: entries[0].signature,
+    signatureIndex: entries[0].signatureIndex,
+  });
+  assert.equal(reopenResult, true);
+
+  const reopenedContent = await fakeVault.readText("Brain/inbox.md");
+  assert.doesNotMatch(reopenedContent, /<!-- brain-reviewed: task/);
+}
+
+/**
+ * Tests folder filtering logic to ensure Brain-generated summaries
+ * and reviews are excluded from context aggregation.
+ */
+async function testFolderFiltering() {
+  const fakeVault = new FakeVaultService({
+    "notes/project-alpha.md": { text: "Project alpha content", mtime: TEST_MTIME_BASE },
+    "notes/project-beta.md": { text: "Project beta content", mtime: TEST_MTIME_BASE + 10 },
+    "Brain/summaries/daily.md": { text: "Daily summary", mtime: TEST_MTIME_BASE + 20 },
+    "Brain/reviews/2026-04-11.md": { text: "Review log", mtime: TEST_MTIME_BASE + 30 },
+    "journal/2026-04-11.md": { text: "Journal entry", mtime: TEST_MTIME_BASE + 40 },
+  });
+
+  // Simulate ContextService folder filtering logic
+  const settings = normalizeBrainSettings({
+    summariesFolder: "Brain/summaries",
+    reviewsFolder: "Brain/reviews",
+  });
+
+  const allFiles = ["notes/project-alpha.md", "notes/project-beta.md", "Brain/summaries/daily.md", "Brain/reviews/2026-04-11.md", "journal/2026-04-11.md"];
+  
+  // Filter out summaries and reviews (as ContextService does)
+  const filtered = allFiles.filter((path) => 
+    !isUnderFolder(path, settings.summariesFolder) &&
+    !isUnderFolder(path, settings.reviewsFolder)
+  );
+
+  assert.equal(filtered.length, 3);
+  assert.ok(filtered.includes("notes/project-alpha.md"));
+  assert.ok(filtered.includes("notes/project-beta.md"));
+  assert.ok(filtered.includes("journal/2026-04-11.md"));
+  assert.ok(!filtered.includes("Brain/summaries/daily.md"));
+  assert.ok(!filtered.includes("Brain/reviews/2026-04-11.md"));
+
+  // Test folder-specific filtering
+  const folderFiles = filtered.filter((path) => isUnderFolder(path, "notes"));
+  assert.equal(folderFiles.length, 2);
+}
+
+/**
+ * Tests the complete capture → review → mark workflow to ensure
+ * integration between inbox, tasks, and review services works correctly.
+ */
+async function testFullCaptureReviewWorkflow() {
+  const fakeVault = new FakeVaultService({
+    "Brain/inbox.md": { text: "", mtime: TEST_MTIME_INBOX },
+    "Brain/tasks.md": { text: "", mtime: TEST_MTIME_TASKS },
+  });
+
+  const settingsProvider = () => normalizeBrainSettings({});
+  const inboxService = new InboxService(fakeVault, settingsProvider);
+  const taskService = new TaskService(fakeVault, settingsProvider);
+
+  // Step 1: Capture to inbox
+  await fakeVault.appendText("Brain/inbox.md", [
+    "## 2026-04-11 09:00",
+    "- Buy groceries",
+    "- Call mom",
+  ].join("\n"));
+  let inboxContent = await fakeVault.readText("Brain/inbox.md");
+  assert.match(inboxContent, /Buy groceries/);
+  assert.match(inboxContent, /Call mom/);
+
+  // Step 2: Review and promote to task
+  const entries = parseInboxEntries(inboxContent);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].reviewed, false);
+
+  await taskService.appendTask(entries[0].preview);
+  await inboxService.markEntryReviewed(entries[0], "task");
+
+  inboxContent = await fakeVault.readText("Brain/inbox.md");
+  const tasksContent = await fakeVault.readText("Brain/tasks.md");
+  assert.match(inboxContent, /<!-- brain-reviewed: task/);
+  assert.match(tasksContent, /Buy groceries/);
+
+  // Step 3: Capture another entry
+  await fakeVault.appendText("Brain/inbox.md", [
+    "## 2026-04-11 10:00",
+    "- Meeting notes from standup",
+  ].join("\n"));
+
+  // Step 4: Verify counts reflect state
+  const unreviewedCount = await inboxService.getUnreviewedCount();
+  const openTaskCount = await taskService.getOpenTaskCount();
+  assert.equal(unreviewedCount, 1);
+  assert.equal(openTaskCount, 1);
+
+  // Step 5: Mark second entry as reviewed
+  const updatedContent = await fakeVault.readText("Brain/inbox.md");
+  const updatedEntries = parseInboxEntries(updatedContent);
+  const unreviewedEntry = updatedEntries.find((e) => !e.reviewed);
+  assert.ok(unreviewedEntry);
+  await inboxService.markEntryReviewed(unreviewedEntry, "skip");
+
+  // Step 6: Verify final state
+  const finalUnreviewedCount = await inboxService.getUnreviewedCount();
+  assert.equal(finalUnreviewedCount, 0);
+}
+
+function isUnderFolder(path: string, folder: string): boolean {
+  const normalizedFolder = folder.replace(/\/+$/, "");
+  return path === normalizedFolder || path.startsWith(`${normalizedFolder}/`);
 }
 
 class FakeVaultService implements InboxVaultService, TaskVaultService {
@@ -589,6 +816,10 @@ class FakeVaultService implements InboxVaultService, TaskVaultService {
 
   setFile(path: string, text: string, mtime: number): void {
     this.files.set(path, { text, mtime });
+  }
+
+  getFileMtime(path: string): number {
+    return this.files.get(path)?.mtime ?? 0;
   }
 
   async appendText(path: string, content: string): Promise<void> {

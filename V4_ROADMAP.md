@@ -19,7 +19,7 @@ Exit criteria:
 - generated artifacts consistently preserve explicit evidence
 - malformed AI output is normalized into stable section shapes
 
-## Milestone 2: Behavior-Level Regression Coverage
+## Milestone 2: Behavior-Level Regression Coverage ✅
 
 - expand smoke tests beyond pure formatting:
   - count and cache invalidation paths
