@@ -2,6 +2,7 @@ import { BrainPluginSettings } from "../settings/settings";
 import { formatDateKey, formatDateTimeKey } from "../utils/date";
 import { VaultService } from "./vault-service";
 import { InboxEntry, InboxEntryIdentity } from "./inbox-service";
+import { isUnderFolder } from "../utils/path";
 import { TFile } from "obsidian";
 
 export interface ReviewLogEntry extends InboxEntryIdentity {
@@ -230,11 +231,6 @@ export function parseReviewLogEntries(
 
   pushEntry();
   return entries;
-}
-
-function isUnderFolder(path: string, folder: string): boolean {
-  const normalizedFolder = folder.replace(/\/+$/, "");
-  return path === normalizedFolder || path.startsWith(`${normalizedFolder}/`);
 }
 
 function encodeReviewSignature(signature: string): string {

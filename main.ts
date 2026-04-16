@@ -34,6 +34,7 @@ import {
 import { formatDateTimeKey } from "./src/utils/date";
 import { SummaryResult } from "./src/services/summary-service";
 import { formatContextSourceLines } from "./src/utils/context-format";
+import { isUnderFolder } from "./src/utils/path";
 
 export default class BrainPlugin extends Plugin {
   settings!: BrainPluginSettings;
@@ -941,21 +942,16 @@ export default class BrainPlugin extends Plugin {
 
   private isArtifactFile(path: string): boolean {
     return (
-      this.isUnderFolder(path, this.settings.notesFolder) ||
-      this.isUnderFolder(path, this.settings.summariesFolder)
+      isUnderFolder(path, this.settings.notesFolder) ||
+      isUnderFolder(path, this.settings.summariesFolder)
     );
   }
 
   private isBrainGeneratedFile(path: string): boolean {
     return (
-      this.isUnderFolder(path, this.settings.summariesFolder) ||
-      this.isUnderFolder(path, this.settings.reviewsFolder)
+      isUnderFolder(path, this.settings.summariesFolder) ||
+      isUnderFolder(path, this.settings.reviewsFolder)
     );
-  }
-
-  private isUnderFolder(path: string, folder: string): boolean {
-    const normalized = folder.replace(/\/+$/, "");
-    return path === normalized || path.startsWith(`${normalized}/`);
   }
 
   private getAppendSeparator(text: string): string {

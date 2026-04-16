@@ -2,6 +2,7 @@ import { App, MarkdownView } from "obsidian";
 import { BrainPluginSettings } from "../settings/settings";
 import { VaultService } from "./vault-service";
 import { joinRecentFilesForSummary } from "../utils/text";
+import { isUnderFolder } from "../utils/path";
 import { TFile } from "obsidian";
 
 export interface SynthesisContext {
@@ -157,11 +158,6 @@ export class ContextService {
       )
       .sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
-}
-
-function isUnderFolder(path: string, folder: string): boolean {
-  const normalizedFolder = folder.replace(/\/+$/, "");
-  return path === normalizedFolder || path.startsWith(`${normalizedFolder}/`);
 }
 
 function getWindowStart(lookbackDays: number): Date {

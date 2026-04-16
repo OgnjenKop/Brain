@@ -117,11 +117,11 @@ export class BrainSidebarView extends ItemView {
     });
     buttons.createEl("button", {
       cls: "brain-button",
-    -      text: "Capture Journal",
-    +      text: "Capture Journal Entry",
+      text: "Capture Journal Entry",
     }).addEventListener("click", () => {
       void this.saveAsJournal();
-    });    buttons.createEl("button", {
+    });
+    buttons.createEl("button", {
       cls: "brain-button",
       text: "Clear",
     }).addEventListener("click", () => {

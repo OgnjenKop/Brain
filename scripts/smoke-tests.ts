@@ -43,6 +43,7 @@ import {
   formatSummaryTimestamp,
   formatTimeKey,
 } from "../src/utils/date";
+import { isUnderFolder } from "../src/utils/path";
 
 // Test constants
 const TEST_MTIME_BASE = 100;
@@ -771,11 +772,6 @@ async function testFullCaptureReviewWorkflow() {
   // Step 6: Verify final state
   const finalUnreviewedCount = await inboxService.getUnreviewedCount();
   assert.equal(finalUnreviewedCount, 0);
-}
-
-function isUnderFolder(path: string, folder: string): boolean {
-  const normalizedFolder = folder.replace(/\/+$/, "");
-  return path === normalizedFolder || path.startsWith(`${normalizedFolder}/`);
 }
 
 class FakeVaultService implements InboxVaultService, TaskVaultService {

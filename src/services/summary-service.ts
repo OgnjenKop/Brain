@@ -7,6 +7,7 @@ import {
 } from "../utils/text";
 import { formatDateTimeKey, formatSummaryTimestamp } from "../utils/date";
 import { buildFallbackSummary } from "../utils/summary-format";
+import { isUnderFolder } from "../utils/path";
 
 export interface SummaryResult {
   content: string;
@@ -89,11 +90,6 @@ export class SummaryService {
       .filter((file) => file.stat.mtime >= cutoff)
       .sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
-}
-
-function isUnderFolder(path: string, folder: string): boolean {
-  const normalizedFolder = folder.replace(/\/+$/, "");
-  return path === normalizedFolder || path.startsWith(`${normalizedFolder}/`);
 }
 
 function getWindowStart(lookbackDays: number): Date {
