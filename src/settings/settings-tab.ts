@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, TextComponent } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian";
 import BrainPlugin from "../../main";
 
 export class BrainSettingTab extends PluginSettingTab {
@@ -24,6 +24,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.inboxFile,
           (value) => {
+            if (!value.trim()) {
+              new Notice("Inbox file cannot be empty");
+              return;
+            }
             this.plugin.settings.inboxFile = value;
           },
         ),
@@ -37,6 +41,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.tasksFile,
           (value) => {
+            if (!value.trim()) {
+              new Notice("Tasks file cannot be empty");
+              return;
+            }
             this.plugin.settings.tasksFile = value;
           },
         ),
@@ -50,6 +58,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.journalFolder,
           (value) => {
+            if (!value.trim()) {
+              new Notice("Journal folder cannot be empty");
+              return;
+            }
             this.plugin.settings.journalFolder = value;
           },
         ),
@@ -63,6 +75,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.notesFolder,
           (value) => {
+            if (!value.trim()) {
+              new Notice("Notes folder cannot be empty");
+              return;
+            }
             this.plugin.settings.notesFolder = value;
           },
         ),
@@ -76,6 +92,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.summariesFolder,
           (value) => {
+            if (!value.trim()) {
+              new Notice("Summaries folder cannot be empty");
+              return;
+            }
             this.plugin.settings.summariesFolder = value;
           },
         ),
@@ -89,6 +109,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.reviewsFolder,
           (value) => {
+            if (!value.trim()) {
+              new Notice("Reviews folder cannot be empty");
+              return;
+            }
             this.plugin.settings.reviewsFolder = value;
           },
         ),
@@ -126,6 +150,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.openAIApiKey,
           (value) => {
+            if (value && !value.startsWith("sk-")) {
+              new Notice("OpenAI API key should start with 'sk-'");
+              return;
+            }
             this.plugin.settings.openAIApiKey = value;
           },
         );
@@ -139,6 +167,10 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.openAIModel,
           (value) => {
+            if (value && !value.trim()) {
+              new Notice("OpenAI model name cannot be empty");
+              return;
+            }
             this.plugin.settings.openAIModel = value;
           },
         ),
