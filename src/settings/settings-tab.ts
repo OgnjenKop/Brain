@@ -24,11 +24,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.inboxFile,
           (value) => {
+            this.plugin.settings.inboxFile = value;
+          },
+          (value) => {
             if (!value.trim()) {
               new Notice("Inbox file cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.inboxFile = value;
+            return true;
           },
         ),
       );
@@ -41,11 +44,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.tasksFile,
           (value) => {
+            this.plugin.settings.tasksFile = value;
+          },
+          (value) => {
             if (!value.trim()) {
               new Notice("Tasks file cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.tasksFile = value;
+            return true;
           },
         ),
       );
@@ -58,11 +64,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.journalFolder,
           (value) => {
+            this.plugin.settings.journalFolder = value;
+          },
+          (value) => {
             if (!value.trim()) {
               new Notice("Journal folder cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.journalFolder = value;
+            return true;
           },
         ),
       );
@@ -75,11 +84,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.notesFolder,
           (value) => {
+            this.plugin.settings.notesFolder = value;
+          },
+          (value) => {
             if (!value.trim()) {
               new Notice("Notes folder cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.notesFolder = value;
+            return true;
           },
         ),
       );
@@ -92,11 +104,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.summariesFolder,
           (value) => {
+            this.plugin.settings.summariesFolder = value;
+          },
+          (value) => {
             if (!value.trim()) {
               new Notice("Summaries folder cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.summariesFolder = value;
+            return true;
           },
         ),
       );
@@ -109,11 +124,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.reviewsFolder,
           (value) => {
+            this.plugin.settings.reviewsFolder = value;
+          },
+          (value) => {
             if (!value.trim()) {
               new Notice("Reviews folder cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.reviewsFolder = value;
+            return true;
           },
         ),
       );
@@ -150,11 +168,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.openAIApiKey,
           (value) => {
+            this.plugin.settings.openAIApiKey = value;
+          },
+          (value) => {
             if (value && !value.startsWith("sk-")) {
               new Notice("OpenAI API key should start with 'sk-'");
-              return;
+              return false;
             }
-            this.plugin.settings.openAIApiKey = value;
+            return true;
           },
         );
       });
@@ -167,11 +188,14 @@ export class BrainSettingTab extends PluginSettingTab {
           text,
           this.plugin.settings.openAIModel,
           (value) => {
+            this.plugin.settings.openAIModel = value;
+          },
+          (value) => {
             if (value && !value.trim()) {
               new Notice("OpenAI model name cannot be empty");
-              return;
+              return false;
             }
-            this.plugin.settings.openAIModel = value;
+            return true;
           },
         ),
       );
@@ -225,12 +249,16 @@ export class BrainSettingTab extends PluginSettingTab {
     text: TextComponent,
     value: string,
     onValueChange: (value: string) => void,
+    validate?: (value: string) => boolean,
   ): TextComponent {
     let currentValue = value;
     let lastSavedValue = value;
     let isSaving = false;
 
     text.setValue(value).onChange((nextValue) => {
+      if (validate && !validate(nextValue)) {
+        return;
+      }
       currentValue = nextValue;
       onValueChange(nextValue);
     });
@@ -245,6 +273,7 @@ export class BrainSettingTab extends PluginSettingTab {
       (saving) => {
         isSaving = saving;
       },
+      validate,
     );
     return text;
   }
@@ -256,6 +285,7 @@ export class BrainSettingTab extends PluginSettingTab {
     setLastSavedValue: (value: string) => void,
     isSaving: () => boolean,
     setSaving: (saving: boolean) => void,
+    validate?: (value: string) => boolean,
   ): void {
     input.addEventListener("blur", () => {
       void this.saveOnBlur(
@@ -264,6 +294,7 @@ export class BrainSettingTab extends PluginSettingTab {
         setLastSavedValue,
         isSaving,
         setSaving,
+        validate,
       );
     });
     input.addEventListener("keydown", (event) => {
@@ -286,6 +317,7 @@ export class BrainSettingTab extends PluginSettingTab {
     setLastSavedValue: (value: string) => void,
     isSaving: () => boolean,
     setSaving: (saving: boolean) => void,
+    validate?: (value: string) => boolean,
   ): Promise<void> {
     if (isSaving()) {
       return;
@@ -293,6 +325,10 @@ export class BrainSettingTab extends PluginSettingTab {
 
     const currentValue = getCurrentValue();
     if (currentValue === getLastSavedValue()) {
+      return;
+    }
+
+    if (validate && !validate(currentValue)) {
       return;
     }
 
