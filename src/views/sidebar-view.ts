@@ -14,6 +14,7 @@ export class BrainSidebarView extends ItemView {
   private aiStatusEl!: HTMLElement;
   private summaryStatusEl!: HTMLElement;
   private isLoading = false;
+  private collapsedSections = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: BrainPlugin) {
     super(leaf);
@@ -135,200 +136,237 @@ export class BrainSidebarView extends ItemView {
     }
   };
 
-  private createCaptureSection(): void {
+  private toggleSection(sectionId: string): void {
+    if (this.collapsedSections.has(sectionId)) {
+      this.collapsedSections.delete(sectionId);
+    } else {
+      this.collapsedSections.add(sectionId);
+    }
+  }
+
+  private createCollapsibleSection(
+    id: string,
+    title: string,
+    description: string,
+    contentCreator: (container: HTMLElement) => void,
+  ): void {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
     });
-    section.createEl("h3", { text: "Quick Capture" });
-    section.createEl("p", {
-      text: "Capture rough input into the vault before review and synthesis.",
+
+    const header = section.createEl("div", { cls: "brain-section-header" });
+    const toggleBtn = header.createEl("button", {
+      cls: "brain-collapse-toggle",
+      text: this.collapsedSections.has(id) ? "▶" : "▼",
+    });
+    header.createEl("h3", { text: title });
+    header.createEl("p", { text: description });
+
+    toggleBtn.addEventListener("click", () => {
+      this.toggleSection(id);
+      const contentEl = section.querySelector(".brain-section-content");
+      if (contentEl) {
+        contentEl.toggleAttribute("hidden");
+        toggleBtn.setText(this.collapsedSections.has(id) ? "▶" : "▼");
+      }
     });
 
-    this.inputEl = section.createEl("textarea", {
-      cls: "brain-capture-input",
-      attr: {
-        placeholder: "Type a note, task, or journal entry...",
-        rows: "8",
+    const content = section.createEl("div", {
+      cls: "brain-section-content",
+      attr: this.collapsedSections.has(id) ? { hidden: "true" } : undefined,
+    });
+    contentCreator(content);
+  }
+
+  private createCaptureSection(): void {
+    this.createCollapsibleSection(
+      "capture",
+      "Quick Capture",
+      "Capture rough input into the vault before review and synthesis.",
+      (container) => {
+        this.inputEl = container.createEl("textarea", {
+          cls: "brain-capture-input",
+          attr: {
+            placeholder: "Type a note, task, or journal entry...",
+            rows: "8",
+          },
+        });
+
+        const buttons = container.createEl("div", { cls: "brain-button-row" });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Capture Note",
+        }).addEventListener("click", () => {
+          void this.saveAsNote();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Capture Task",
+        }).addEventListener("click", () => {
+          void this.saveAsTask();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Capture Journal Entry",
+        }).addEventListener("click", () => {
+          void this.saveAsJournal();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Clear",
+        }).addEventListener("click", () => {
+          this.inputEl.value = "";
+          new Notice("Capture cleared");
+        });
       },
-    });
-
-    const buttons = section.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Capture Note",
-    }).addEventListener("click", () => {
-      void this.saveAsNote();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Capture Task",
-    }).addEventListener("click", () => {
-      void this.saveAsTask();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Capture Journal Entry",
-    }).addEventListener("click", () => {
-      void this.saveAsJournal();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Clear",
-    }).addEventListener("click", () => {
-      this.inputEl.value = "";
-      new Notice("Capture cleared");
-    });
+    );
   }
 
   private createSynthesisSection(): void {
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Synthesize" });
-    section.createEl("p", {
-      text: "Turn explicit context into summaries, clean notes, tasks, and briefs.",
-    });
-
-    const buttons = section.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
-      cls: "brain-button brain-button-primary",
-      text: "Summarize Current Note",
-    }).addEventListener("click", () => {
-      void this.plugin.askAboutCurrentNote();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Synthesize Current Note...",
-    }).addEventListener("click", async () => {
-      this.setLoading(true);
-      try {
-        await this.plugin.askAboutCurrentNoteWithTemplate();
-      } finally {
-        this.setLoading(false);
-      }
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Extract Tasks From Selection",
-    }).addEventListener("click", () => {
-      void this.plugin.askAboutSelection();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Draft Brief From Folder",
-    }).addEventListener("click", () => {
-      void this.plugin.askAboutCurrentFolder();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Clean Note From Recent Files",
-    }).addEventListener("click", async () => {
-      this.setLoading(true);
-      try {
-        await this.plugin.askAboutRecentFiles();
-      } finally {
-        this.setLoading(false);
-      }
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Synthesize Notes...",
-    }).addEventListener("click", async () => {
-      this.setLoading(true);
-      try {
-        await this.plugin.synthesizeNotes();
-      } finally {
-        this.setLoading(false);
-      }
-    });
+    this.createCollapsibleSection(
+      "synthesis",
+      "Synthesize",
+      "Turn explicit context into summaries, clean notes, tasks, and briefs.",
+      (container) => {
+        const buttons = container.createEl("div", { cls: "brain-button-row" });
+        buttons.createEl("button", {
+          cls: "brain-button brain-button-primary",
+          text: "Summarize Current Note",
+        }).addEventListener("click", () => {
+          void this.plugin.askAboutCurrentNote();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Synthesize Current Note...",
+        }).addEventListener("click", async () => {
+          this.setLoading(true);
+          try {
+            await this.plugin.askAboutCurrentNoteWithTemplate();
+          } finally {
+            this.setLoading(false);
+          }
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Extract Tasks From Selection",
+        }).addEventListener("click", () => {
+          void this.plugin.askAboutSelection();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Draft Brief From Folder",
+        }).addEventListener("click", () => {
+          void this.plugin.askAboutCurrentFolder();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Clean Note From Recent Files",
+        }).addEventListener("click", async () => {
+          this.setLoading(true);
+          try {
+            await this.plugin.askAboutRecentFiles();
+          } finally {
+            this.setLoading(false);
+          }
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Synthesize Notes...",
+        }).addEventListener("click", async () => {
+          this.setLoading(true);
+          try {
+            await this.plugin.synthesizeNotes();
+          } finally {
+            this.setLoading(false);
+          }
+        });
+      },
+    );
   }
 
   private createAskSection(): void {
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Ask Brain" });
-    section.createEl("p", {
-      text: "Ask a question about the current note, a selected group, a folder, or the whole vault.",
-    });
-
-    const buttons = section.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
-      cls: "brain-button brain-button-primary",
-      text: "Ask Question...",
-    }).addEventListener("click", () => {
-      void this.plugin.askQuestion();
-    });
+    this.createCollapsibleSection(
+      "ask",
+      "Ask Brain",
+      "Ask a question about the current note, a selected group, a folder, or the whole vault.",
+      (container) => {
+        const buttons = container.createEl("div", { cls: "brain-button-row" });
+        buttons.createEl("button", {
+          cls: "brain-button brain-button-primary",
+          text: "Ask Question",
+        }).addEventListener("click", () => {
+          void this.plugin.askQuestion();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "About Current Note",
+        }).addEventListener("click", () => {
+          void this.plugin.askQuestionAboutCurrentNote();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "About Current Folder",
+        }).addEventListener("click", () => {
+          void this.plugin.askQuestionAboutCurrentFolder();
+        });
+      },
+    );
   }
 
   private createReviewSection(): void {
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Review" });
-    section.createEl("p", {
-      text: "Process captured input and keep the daily loop moving.",
-    });
-
-    const buttons = section.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
-      cls: "brain-button brain-button-primary",
-      text: "Review Inbox",
-    }).addEventListener("click", () => {
-      void this.plugin.processInbox();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Open Today's Journal",
-    }).addEventListener("click", () => {
-      void this.plugin.openTodaysJournal();
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Create Today Summary",
-    }).addEventListener("click", () => {
-      void this.plugin.generateSummaryForWindow(1, "Today");
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Create Weekly Summary",
-    }).addEventListener("click", () => {
-      void this.plugin.generateSummaryForWindow(7, "Week");
-    });
+    this.createCollapsibleSection(
+      "review",
+      "Review",
+      "Process captured input and keep the daily loop moving.",
+      (container) => {
+        const buttons = container.createEl("div", { cls: "brain-button-row" });
+        buttons.createEl("button", {
+          cls: "brain-button brain-button-primary",
+          text: "Review Inbox",
+        }).addEventListener("click", () => {
+          void this.plugin.processInbox();
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Open Review History",
+        }).addEventListener("click", () => {
+          void this.plugin.openReviewHistory();
+        });
+      },
+    );
   }
 
   private createTopicPageSection(): void {
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Topic Pages" });
-    section.createEl("p", {
-      text: "Brain’s flagship flow: turn explicit context into a durable markdown page you can keep building.",
-    });
-
-    const buttons = section.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Create Topic Page",
-    }).addEventListener("click", async () => {
-      this.setLoading(true);
-      try {
-        await this.plugin.createTopicPage();
-      } finally {
-        this.setLoading(false);
-      }
-    });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Topic Page From Current Note",
-    }).addEventListener("click", async () => {
-      this.setLoading(true);
-      try {
-        await this.plugin.createTopicPageForScope("note");
-      } finally {
-        this.setLoading(false);
-      }
-    });
+    this.createCollapsibleSection(
+      "topic",
+      "Topic Pages",
+      "Brain's flagship flow: turn explicit context into a durable markdown page you can keep building.",
+      (container) => {
+        const buttons = container.createEl("div", { cls: "brain-button-row" });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Create Topic Page",
+        }).addEventListener("click", async () => {
+          this.setLoading(true);
+          try {
+            await this.plugin.createTopicPage();
+          } finally {
+            this.setLoading(false);
+          }
+        });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Topic Page From Current Note",
+        }).addEventListener("click", async () => {
+          this.setLoading(true);
+          try {
+            await this.plugin.createTopicPageForScope("note");
+          } finally {
+            this.setLoading(false);
+          }
+        });
+      },
+    );
   }
 
   private createCaptureAssistSection(): void {
@@ -336,68 +374,71 @@ export class BrainSidebarView extends ItemView {
       return;
     }
 
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Capture Assist" });
-    section.createEl("p", {
-      text: "Use AI only to classify fresh capture into note, task, or journal.",
-    });
-
-    const buttons = section.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Auto-route Capture",
-    }).addEventListener("click", () => {
-      void this.autoRoute();
-    });
+    this.createCollapsibleSection(
+      "capture-assist",
+      "Capture Assist",
+      "Use AI only to classify fresh capture into note, task, or journal.",
+      (container) => {
+        const buttons = container.createEl("div", { cls: "brain-button-row" });
+        buttons.createEl("button", {
+          cls: "brain-button",
+          text: "Auto-route Capture",
+        }).addEventListener("click", () => {
+          void this.autoRoute();
+        });
+      },
+    );
   }
 
   private createStatusSection(): void {
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Status" });
+    this.createCollapsibleSection(
+      "status",
+      "Status",
+      "Current inbox, task, and synthesis status.",
+      (container) => {
+        const inboxRow = container.createEl("p", { text: "Inbox: loading..." });
+        this.inboxCountEl = inboxRow;
 
-    const inboxRow = section.createEl("p", { text: "Inbox: loading..." });
-    this.inboxCountEl = inboxRow;
+        const taskRow = container.createEl("p", { text: "Tasks: loading..." });
+        this.taskCountEl = taskRow;
 
-    const taskRow = section.createEl("p", { text: "Tasks: loading..." });
-    this.taskCountEl = taskRow;
+        const reviewRow = container.createEl("div", { cls: "brain-status-row" });
+        this.reviewHistoryEl = reviewRow.createEl("span", { text: "Review history: loading..." });
+        reviewRow.createEl("button", {
+          cls: "brain-button brain-button-small",
+          text: "Open",
+        }).addEventListener("click", () => {
+          void this.plugin.openReviewHistory();
+        });
 
-    const reviewRow = section.createEl("div", { cls: "brain-status-row" });
-    this.reviewHistoryEl = reviewRow.createEl("span", { text: "Review history: loading..." });
-    reviewRow.createEl("button", {
-      cls: "brain-button brain-button-small",
-      text: "Open",
-    }).addEventListener("click", () => {
-      void this.plugin.openReviewHistory();
-    });
+        const aiRow = container.createEl("p", { text: "AI: loading..." });
+        this.aiStatusEl = aiRow;
 
-    const aiRow = section.createEl("p", { text: "AI: loading..." });
-    this.aiStatusEl = aiRow;
-
-    const summaryRow = section.createEl("p", { text: "Last artifact: loading..." });
-    this.summaryStatusEl = summaryRow;
+        const summaryRow = container.createEl("p", { text: "Last artifact: loading..." });
+        this.summaryStatusEl = summaryRow;
+      },
+    );
   }
 
   private createOutputSection(): void {
-    const section = this.contentEl.createEl("section", {
-      cls: "brain-section",
-    });
-    section.createEl("h3", { text: "Artifacts" });
+    this.createCollapsibleSection(
+      "output",
+      "Artifacts",
+      "Recent synthesis results and generated artifacts.",
+      (container) => {
+        container.createEl("h4", { text: "Last Result" });
+        this.resultEl = container.createEl("pre", {
+          cls: "brain-output",
+          text: "No result yet.",
+        });
 
-    section.createEl("h4", { text: "Last Result" });
-    this.resultEl = section.createEl("pre", {
-      cls: "brain-output",
-      text: "No result yet.",
-    });
-
-    section.createEl("h4", { text: "Last Artifact" });
-    this.summaryEl = section.createEl("pre", {
-      cls: "brain-output",
-      text: "No artifact generated yet.",
-    });
+        container.createEl("h4", { text: "Last Artifact" });
+        this.summaryEl = container.createEl("pre", {
+          cls: "brain-output",
+          text: "No artifact generated yet.",
+        });
+      },
+    );
   }
 
   private async saveAsNote(): Promise<void> {
