@@ -13,6 +13,7 @@ export class BrainSidebarView extends ItemView {
   private reviewHistoryEl!: HTMLElement;
   private aiStatusEl!: HTMLElement;
   private summaryStatusEl!: HTMLElement;
+  private isLoading = false;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: BrainPlugin) {
     super(leaf);
@@ -86,6 +87,17 @@ export class BrainSidebarView extends ItemView {
     }
   }
 
+  private setLoading(loading: boolean): void {
+    this.isLoading = loading;
+    const buttons = Array.from(this.contentEl.querySelectorAll("button.brain-button"));
+    for (const button of buttons) {
+      (button as HTMLButtonElement).disabled = loading;
+    }
+    if (this.inputEl) {
+      this.inputEl.disabled = loading;
+    }
+  }
+
   private createCaptureSection(): void {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
@@ -150,8 +162,13 @@ export class BrainSidebarView extends ItemView {
     buttons.createEl("button", {
       cls: "brain-button",
       text: "Synthesize Current Note...",
-    }).addEventListener("click", () => {
-      void this.plugin.askAboutCurrentNoteWithTemplate();
+    }).addEventListener("click", async () => {
+      this.setLoading(true);
+      try {
+        await this.plugin.askAboutCurrentNoteWithTemplate();
+      } finally {
+        this.setLoading(false);
+      }
     });
     buttons.createEl("button", {
       cls: "brain-button",
@@ -168,14 +185,24 @@ export class BrainSidebarView extends ItemView {
     buttons.createEl("button", {
       cls: "brain-button",
       text: "Clean Note From Recent Files",
-    }).addEventListener("click", () => {
-      void this.plugin.askAboutRecentFiles();
+    }).addEventListener("click", async () => {
+      this.setLoading(true);
+      try {
+        await this.plugin.askAboutRecentFiles();
+      } finally {
+        this.setLoading(false);
+      }
     });
     buttons.createEl("button", {
       cls: "brain-button",
       text: "Synthesize Notes...",
-    }).addEventListener("click", () => {
-      void this.plugin.synthesizeNotes();
+    }).addEventListener("click", async () => {
+      this.setLoading(true);
+      try {
+        await this.plugin.synthesizeNotes();
+      } finally {
+        this.setLoading(false);
+      }
     });
   }
 
@@ -244,16 +271,26 @@ export class BrainSidebarView extends ItemView {
 
     const buttons = section.createEl("div", { cls: "brain-button-row" });
     buttons.createEl("button", {
-      cls: "brain-button brain-button-primary",
+      cls: "brain-button",
       text: "Create Topic Page",
-    }).addEventListener("click", () => {
-      void this.plugin.createTopicPage();
+    }).addEventListener("click", async () => {
+      this.setLoading(true);
+      try {
+        await this.plugin.createTopicPage();
+      } finally {
+        this.setLoading(false);
+      }
     });
     buttons.createEl("button", {
       cls: "brain-button",
       text: "Topic Page From Current Note",
-    }).addEventListener("click", () => {
-      void this.plugin.createTopicPageForScope("note");
+    }).addEventListener("click", async () => {
+      this.setLoading(true);
+      try {
+        await this.plugin.createTopicPageForScope("note");
+      } finally {
+        this.setLoading(false);
+      }
     });
   }
 
@@ -354,6 +391,7 @@ export class BrainSidebarView extends ItemView {
       return;
     }
 
+    this.setLoading(true);
     try {
       const route = await this.plugin.routeText(text);
       if (!route) {
@@ -377,8 +415,9 @@ export class BrainSidebarView extends ItemView {
         );
       }
     } catch (error) {
-      console.error(error);
-      new Notice("Could not auto-route capture");
+      showError(error, "Could not auto-route capture");
+    } finally {
+      this.setLoading(false);
     }
   }
 
