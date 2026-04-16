@@ -1,6 +1,7 @@
 import { App, Modal, Notice, TFile } from "obsidian";
 import { ReviewLogEntry } from "../services/review-log-service";
 import BrainPlugin from "../../main";
+import { showError } from "../utils/error-handler";
 
 export class ReviewHistoryModal extends Modal {
   constructor(
@@ -80,8 +81,7 @@ export class ReviewHistoryModal extends Modal {
       new Notice(message);
       this.close();
     } catch (error) {
-      console.error(error);
-      new Notice("Could not re-open inbox entry");
+      showError(error, "Could not re-open inbox entry");
     }
   }
 }

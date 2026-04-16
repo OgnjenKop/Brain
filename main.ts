@@ -36,6 +36,7 @@ import { SummaryResult } from "./src/services/summary-service";
 import { formatContextSourceLines } from "./src/utils/context-format";
 import { isUnderFolder } from "./src/utils/path";
 import { registerCommands } from "./src/commands/register-commands";
+import { showError } from "./src/utils/error-handler";
 
 export default class BrainPlugin extends Plugin {
   settings!: BrainPluginSettings;
@@ -177,7 +178,7 @@ export default class BrainPlugin extends Plugin {
     try {
       await this.refreshSidebarStatus();
     } catch (error) {
-      console.error(error);
+      showError(error, "Could not refresh sidebar status");
     }
   }
 
@@ -269,10 +270,7 @@ export default class BrainPlugin extends Plugin {
 
       await this.runSynthesisFlow(context, template);
     } catch (error) {
-      console.error(error);
-      new Notice(
-        error instanceof Error ? error.message : "Could not synthesize these notes",
-      );
+      showError(error, "Could not synthesize these notes");
     }
   }
 
@@ -295,8 +293,7 @@ export default class BrainPlugin extends Plugin {
 
       await this.askQuestionForScope(scope);
     } catch (error) {
-      console.error(error);
-      new Notice(error instanceof Error ? error.message : "Could not ask Brain");
+      showError(error, "Could not ask Brain");
     }
   }
 
@@ -356,10 +353,7 @@ export default class BrainPlugin extends Plugin {
         this.app.workspace.revealLeaf(leaf);
       }
     } catch (error) {
-      console.error(error);
-      new Notice(
-        error instanceof Error ? error.message : "Could not create that topic page",
-      );
+      showError(error, "Could not create that topic page");
     }
   }
 
@@ -443,8 +437,7 @@ export default class BrainPlugin extends Plugin {
       const result = await action(value);
       await this.reportActionResult(result);
     } catch (error) {
-      console.error(error);
-      new Notice("Brain could not save that entry");
+      showError(error, "Brain could not save that entry");
     }
   }
 
@@ -575,10 +568,7 @@ export default class BrainPlugin extends Plugin {
 
       await this.runSynthesisFlow(context, template);
     } catch (error) {
-      console.error(error);
-      new Notice(
-        error instanceof Error ? error.message : "Could not synthesize that context",
-      );
+      showError(error, "Could not synthesize that context");
     }
   }
 
@@ -645,10 +635,7 @@ export default class BrainPlugin extends Plugin {
         "Ask Question About Selected Notes",
       );
     } catch (error) {
-      console.error(error);
-      new Notice(
-        error instanceof Error ? error.message : "Could not select notes for Brain",
-      );
+      showError(error, "Could not select notes for Brain");
     }
   }
 
@@ -700,14 +687,11 @@ export default class BrainPlugin extends Plugin {
         onInsert: async () => this.insertSynthesisIntoCurrentNote(result, context),
         onSave: async () => this.saveSynthesisResult(result, context),
         onActionComplete: async (message) => {
-          await this.reportActionResult(message);
+          await this.runSynthesisFlow(context, "summarize");
         },
       }).open();
     } catch (error) {
-      console.error(error);
-      new Notice(
-        error instanceof Error ? error.message : "Could not answer that question",
-      );
+      showError(error, "Could not answer that question");
     }
   }
 
@@ -796,7 +780,7 @@ export default class BrainPlugin extends Plugin {
       }
       this.lastSummaryAt = latest > 0 ? new Date(latest) : null;
     } catch (error) {
-      console.error(error);
+      showError(error, "Could not initialize last artifact timestamp");
       this.lastSummaryAt = null;
     }
   }

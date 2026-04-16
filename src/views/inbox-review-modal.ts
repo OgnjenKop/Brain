@@ -1,6 +1,8 @@
-import { App, Modal, Notice } from "obsidian";
-import { InboxEntry } from "../services/inbox-service";
+import { App, Modal, Notice, Setting } from "obsidian";
+import { InboxEntry, InboxEntryIdentity } from "../services/inbox-service";
+import { ReviewLogEntry } from "../services/review-log-service";
 import { ReviewService } from "../services/review-service";
+import { showError } from "../utils/error-handler";
 
 type ReviewAction = "keep" | "task" | "journal" | "note" | "skip";
 
@@ -114,7 +116,7 @@ export class InboxReviewModal extends Modal {
           new Notice(message);
         }
       } catch (error) {
-        console.error(error);
+        showError(error, "Could not process review action");
       }
 
       this.currentIndex += 1;
@@ -127,8 +129,7 @@ export class InboxReviewModal extends Modal {
 
       this.render();
     } catch (error) {
-      console.error(error);
-      new Notice("Could not process inbox entry");
+      showError(error, "Could not process inbox entry");
     }
   }
 }

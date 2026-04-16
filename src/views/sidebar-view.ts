@@ -1,5 +1,6 @@
 import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import BrainPlugin from "../../main";
+import { showError } from "../utils/error-handler";
 
 export const BRAIN_VIEW_TYPE = "brain-sidebar-view";
 
@@ -396,8 +397,7 @@ export class BrainSidebarView extends ItemView {
       await this.plugin.reportActionResult(result);
       this.inputEl.value = "";
     } catch (error) {
-      console.error(error);
-      new Notice(failureMessage);
+      showError(error, failureMessage);
     }
   }
 }

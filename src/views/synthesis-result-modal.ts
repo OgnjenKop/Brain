@@ -2,6 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import { SynthesisContext } from "../services/context-service";
 import { SynthesisResult } from "../services/synthesis-service";
 import { formatContextLocation } from "../utils/context-format";
+import { showError } from "../utils/error-handler";
 
 interface SynthesisResultModalOptions {
   context: SynthesisContext;
@@ -109,8 +110,7 @@ export class SynthesisResultModal extends Modal {
       await this.options.onActionComplete(message);
       this.close();
     } catch (error) {
-      console.error(error);
-      new Notice("Could not update the synthesis result");
+      showError(error, "Could not update the synthesis result");
     } finally {
       this.working = false;
       this.setButtonsDisabled(false);
