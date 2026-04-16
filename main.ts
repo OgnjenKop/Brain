@@ -35,6 +35,7 @@ import { formatDateTimeKey } from "./src/utils/date";
 import { SummaryResult } from "./src/services/summary-service";
 import { formatContextSourceLines } from "./src/utils/context-format";
 import { isUnderFolder } from "./src/utils/path";
+import { registerCommands } from "./src/commands/register-commands";
 
 export default class BrainPlugin extends Plugin {
   settings!: BrainPluginSettings;
@@ -110,147 +111,7 @@ export default class BrainPlugin extends Plugin {
       return view;
     });
 
-    this.addCommand({
-      id: "capture-note",
-      name: "Brain: Capture Note",
-      callback: async () => {
-        await this.captureFromModal("Capture Note", "Capture", async (text) => {
-          const saved = await this.noteService.appendNote(text);
-          return `Captured note in ${saved.path}`;
-        });
-      },
-    });
-
-    this.addCommand({
-      id: "add-task",
-      name: "Brain: Capture Task",
-      callback: async () => {
-        await this.captureFromModal("Capture Task", "Capture", async (text) => {
-          const saved = await this.taskService.appendTask(text);
-          return `Saved task to ${saved.path}`;
-        });
-      },
-    });
-
-    this.addCommand({
-      id: "add-journal-entry",
-      name: "Brain: Capture Journal",
-      callback: async () => {
-        await this.captureFromModal(
-          "Capture Journal",
-          "Capture",
-          async (text) => {
-            const saved = await this.journalService.appendEntry(text);
-            return `Saved journal entry to ${saved.path}`;
-          },
-          true,
-        );
-      },
-    });
-
-    this.addCommand({
-      id: "process-inbox",
-      name: "Brain: Review Inbox",
-      callback: async () => {
-        await this.processInbox();
-      },
-    });
-
-    this.addCommand({
-      id: "review-history",
-      name: "Brain: Open Review History",
-      callback: async () => {
-        await this.openReviewHistory();
-      },
-    });
-
-    this.addCommand({
-      id: "summarize-today",
-      name: "Brain: Generate Today Summary",
-      callback: async () => {
-        await this.generateSummaryForWindow(1, "Today");
-      },
-    });
-
-    this.addCommand({
-      id: "summarize-this-week",
-      name: "Brain: Generate Weekly Summary",
-      callback: async () => {
-        await this.generateSummaryForWindow(7, "Week");
-      },
-    });
-
-    this.addCommand({
-      id: "add-task-from-selection",
-      name: "Brain: Capture Task From Selection",
-      callback: async () => {
-        await this.addTaskFromSelection();
-      },
-    });
-
-    this.addCommand({
-      id: "open-todays-journal",
-      name: "Brain: Open Today's Journal",
-      callback: async () => {
-        await this.openTodaysJournal();
-      },
-    });
-
-    this.addCommand({
-      id: "open-sidebar",
-      name: "Brain: Open Brain Sidebar",
-      callback: async () => {
-        await this.openSidebar();
-      },
-    });
-
-    this.addCommand({
-      id: "synthesize-notes",
-      name: "Brain: Synthesize Notes",
-      callback: async () => {
-        await this.synthesizeNotes();
-      },
-    });
-
-    this.addCommand({
-      id: "synthesize-current-note",
-      name: "Brain: Synthesize Current Note",
-      callback: async () => {
-        await this.askAboutCurrentNoteWithTemplate();
-      },
-    });
-
-    this.addCommand({
-      id: "ask-question",
-      name: "Brain: Ask Question",
-      callback: async () => {
-        await this.askQuestion();
-      },
-    });
-
-    this.addCommand({
-      id: "ask-question-current-note",
-      name: "Brain: Ask Question About Current Note",
-      callback: async () => {
-        await this.askQuestionAboutCurrentNote();
-      },
-    });
-
-    this.addCommand({
-      id: "create-topic-page",
-      name: "Brain: Generate Topic Page",
-      callback: async () => {
-        await this.createTopicPage();
-      },
-    });
-
-    this.addCommand({
-      id: "create-topic-page-current-note",
-      name: "Brain: Generate Topic Page From Current Note",
-      callback: async () => {
-        await this.createTopicPageForScope("note");
-      },
-    });
+    registerCommands(this);
 
     this.addSettingTab(new BrainSettingTab(this.app, this));
   }
