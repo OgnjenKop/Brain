@@ -49,10 +49,12 @@ export class BrainSidebarView extends ItemView {
     this.createCaptureAssistSection();
     this.createStatusSection();
     this.createOutputSection();
+    this.registerKeyboardShortcuts();
     await this.refreshStatus();
   }
 
   onClose(): Promise<void> {
+    window.removeEventListener("keydown", this.handleKeyDown);
     return Promise.resolve();
   }
 
@@ -97,6 +99,41 @@ export class BrainSidebarView extends ItemView {
       this.inputEl.disabled = loading;
     }
   }
+
+  private registerKeyboardShortcuts(): void {
+    window.addEventListener("keydown", this.handleKeyDown);
+  }
+
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+      return;
+    }
+
+    switch (event.key.toLowerCase()) {
+      case "n":
+        event.preventDefault();
+        void this.saveAsNote();
+        break;
+      case "t":
+        event.preventDefault();
+        void this.saveAsTask();
+        break;
+      case "j":
+        event.preventDefault();
+        void this.saveAsJournal();
+        break;
+      case "c":
+        event.preventDefault();
+        this.inputEl.value = "";
+        new Notice("Capture cleared");
+        break;
+    }
+  };
 
   private createCaptureSection(): void {
     const section = this.contentEl.createEl("section", {
