@@ -84,15 +84,17 @@ It includes:
 - quick capture into inbox, tasks, or journal
 - topic-page creation as the signature artifact flow
 - synthesis actions: summarize current note, synthesize current note with template picker, extract tasks from selection, draft brief from folder, clean note from recent files, or synthesize selected notes
-- a scoped question flow for the current note, a selected group, a folder, or the entire vault
-- topic page creation from the current note, a selected group, a folder, or the entire vault
+- a scoped question flow for the current note, a folder, or the entire vault
+- topic page creation from the current note, a folder, or the entire vault
 - fast default outputs for common jobs plus a choose-template path for current note and picked notes
 - template picker for summarize, extract tasks, extract decisions, extract open questions, rewrite as clean note, and draft project brief
 - scope picker for synthesis, questions, and topic pages
-- review actions for inbox processing, journal access, and time-window summaries
+- review actions for inbox processing and review history
 - optional capture auto-routing when AI routing is enabled
 - status for inbox, tasks, AI, review history, and last artifact
 - output panels for the latest result and last artifact
+- collapsible sections to reduce UI density
+- keyboard shortcuts for quick capture: n (note), t (task), j (journal), c (clear)
 
 ## Inbox Review
 
