@@ -11,6 +11,11 @@ export interface BrainPluginSettings {
 
   openAIApiKey: string;
   openAIModel: string;
+  openAIBaseUrl: string;
+
+  aiProvider: "openai" | "gemini";
+  geminiApiKey: string;
+  geminiModel: string;
 
   summaryLookbackDays: number;
   summaryMaxChars: number;
@@ -30,7 +35,11 @@ export const DEFAULT_BRAIN_SETTINGS: BrainPluginSettings = {
   enableAISummaries: false,
   enableAIRouting: false,
   openAIApiKey: "",
-  openAIModel: "gpt-4.1-mini",
+  openAIModel: "gpt-4o-mini",
+  openAIBaseUrl: "https://api.openai.com/v1/chat/completions",
+  aiProvider: "openai",
+  geminiApiKey: "",
+  geminiModel: "gemini-1.5-flash",
   summaryLookbackDays: 7,
   summaryMaxChars: 12000,
   persistSummaries: true,
@@ -71,6 +80,16 @@ export function normalizeBrainSettings(
       typeof merged.openAIModel === "string" && merged.openAIModel.trim()
         ? merged.openAIModel.trim()
         : DEFAULT_BRAIN_SETTINGS.openAIModel,
+    openAIBaseUrl:
+      typeof merged.openAIBaseUrl === "string" && merged.openAIBaseUrl.trim()
+        ? merged.openAIBaseUrl.trim()
+        : DEFAULT_BRAIN_SETTINGS.openAIBaseUrl,
+    aiProvider: (merged.aiProvider === "gemini" ? "gemini" : "openai") as "openai" | "gemini",
+    geminiApiKey: typeof merged.geminiApiKey === "string" ? merged.geminiApiKey.trim() : "",
+    geminiModel:
+      typeof merged.geminiModel === "string" && merged.geminiModel.trim()
+        ? merged.geminiModel.trim()
+        : DEFAULT_BRAIN_SETTINGS.geminiModel,
     summaryLookbackDays: clampInteger(merged.summaryLookbackDays, 1, 365, DEFAULT_BRAIN_SETTINGS.summaryLookbackDays),
     summaryMaxChars: clampInteger(merged.summaryMaxChars, 1000, 100000, DEFAULT_BRAIN_SETTINGS.summaryMaxChars),
     persistSummaries: Boolean(merged.persistSummaries),

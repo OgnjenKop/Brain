@@ -7,6 +7,11 @@ export class BrainSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: BrainPlugin) {
     super(app, plugin);
     this.plugin = plugin;
+
+    // Listen for setting updates (e.g., from auth flow)
+    this.plugin.app.workspace.on("brain:settings-updated", () => {
+      this.display();
+    });
   }
 
   display(): void {
@@ -139,8 +144,215 @@ export class BrainSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "AI" });
 
     new Setting(containerEl)
+      .setName("AI Provider")
+      .setDesc("Choose which AI provider to use for synthesis and routing.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            openai: "OpenAI / ChatGPT",
+            gemini: "Google Gemini",
+          })
+          .setValue(this.plugin.settings.aiProvider)
+          .onChange(async (value) => {
+            this.plugin.settings.aiProvider = value as "openai" | "gemini";
+            await this.plugin.saveSettings();
+            this.display(); // Refresh UI to show relevant fields
+          }),
+      );
+
+    if (this.plugin.settings.aiProvider === "openai") {
+      const authSetting = new Setting(containerEl)
+        .setName("Authentication")
+        .setDesc(this.plugin.settings.openAIApiKey ? "Connected to OpenAI" : "Not connected");
+
+      if (this.plugin.settings.openAIApiKey) {
+        authSetting.addButton((button) =>
+          button
+            .setButtonText("Disconnect")
+            .setWarning()
+            .onClick(async () => {
+              this.plugin.settings.openAIApiKey = "";
+              await this.plugin.saveSettings();
+              this.display();
+            }),
+        );
+      } else {
+        authSetting.addButton((button) =>
+          button
+            .setButtonText("Connect OpenAI")
+            .setCta()
+            .onClick(async () => {
+              await this.plugin.authService.login("openai");
+            }),
+        );
+      }
+
+      new Setting(containerEl)
+        .setName("OpenAI API key")
+        .setDesc("Stored locally in plugin settings. Can be an API key or a session/access token.")
+        .addText((text) => {
+          text.inputEl.type = "password";
+          text.setPlaceholder("Enter key or token...");
+          this.bindTextSetting(
+            text,
+            this.plugin.settings.openAIApiKey,
+            (value) => {
+              this.plugin.settings.openAIApiKey = value;
+            },
+          );
+        });
+
+      new Setting(containerEl)
+        .setName("OpenAI model")
+        .setDesc("Select a model or enter a custom one.")
+        .addDropdown((dropdown) => {
+          dropdown
+            .addOptions({
+              "gpt-4o-mini": "GPT-4o Mini (Default)",
+              "gpt-4o": "GPT-4o (Powerful)",
+              "o1-mini": "o1 Mini (Reasoning)",
+              "o1-preview": "o1 Preview (Strong Reasoning)",
+              "gpt-3.5-turbo": "GPT-3.5 Turbo (Legacy)",
+              custom: "Custom Model...",
+            })
+            .setValue(
+              ["gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "gpt-3.5-turbo"].includes(
+                this.plugin.settings.openAIModel,
+              )
+                ? this.plugin.settings.openAIModel
+                : "custom",
+            )
+            .onChange(async (value) => {
+              if (value !== "custom") {
+                this.plugin.settings.openAIModel = value;
+                await this.plugin.saveSettings();
+                this.display();
+              }
+            });
+        })
+        .addText((text) => {
+          const isCustom = !["gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "gpt-3.5-turbo"].includes(
+            this.plugin.settings.openAIModel,
+          );
+          if (isCustom) {
+            text.setPlaceholder("Enter custom model name...");
+            this.bindTextSetting(text, this.plugin.settings.openAIModel, (value) => {
+              this.plugin.settings.openAIModel = value;
+            });
+          } else {
+            text.inputEl.style.display = "none";
+          }
+        });
+
+      new Setting(containerEl)
+
+        .setName("OpenAI base URL")
+        .setDesc("Override the default OpenAI endpoint for custom proxies or local LLMs.")
+        .addText((text) =>
+          this.bindTextSetting(
+            text,
+            this.plugin.settings.openAIBaseUrl,
+            (value) => {
+              this.plugin.settings.openAIBaseUrl = value;
+            },
+            (value) => {
+              if (value && !value.trim()) {
+                new Notice("OpenAI base URL cannot be empty");
+                return false;
+              }
+              return true;
+            },
+          ),
+        );
+    } else if (this.plugin.settings.aiProvider === "gemini") {
+      const authSetting = new Setting(containerEl)
+        .setName("Authentication")
+        .setDesc(this.plugin.settings.geminiApiKey ? "Connected to Google" : "Not connected");
+
+      if (this.plugin.settings.geminiApiKey) {
+        authSetting.addButton((button) =>
+          button
+            .setButtonText("Disconnect")
+            .setWarning()
+            .onClick(async () => {
+              this.plugin.settings.geminiApiKey = "";
+              await this.plugin.saveSettings();
+              this.display();
+            }),
+        );
+      } else {
+        authSetting.addButton((button) =>
+          button
+            .setButtonText("Connect Google")
+            .setCta()
+            .onClick(async () => {
+              await this.plugin.authService.login("gemini");
+            }),
+        );
+      }
+
+      new Setting(containerEl)
+        .setName("Gemini API key")
+        .setDesc("Stored locally in plugin settings.")
+        .addText((text) => {
+          text.inputEl.type = "password";
+          text.setPlaceholder("Enter Gemini API key...");
+          this.bindTextSetting(
+            text,
+            this.plugin.settings.geminiApiKey,
+            (value) => {
+              this.plugin.settings.geminiApiKey = value;
+            },
+          );
+        });
+
+      new Setting(containerEl)
+        .setName("Gemini model")
+        .setDesc("Select a Gemini model or enter a custom one.")
+        .addDropdown((dropdown) => {
+          dropdown
+            .addOptions({
+              "gemini-1.5-flash": "Gemini 1.5 Flash (Fastest)",
+              "gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B (Lighter)",
+              "gemini-1.5-pro": "Gemini 1.5 Pro (Powerful)",
+              "gemini-2.0-flash": "Gemini 2.0 Flash (Latest)",
+              custom: "Custom Model...",
+            })
+            .setValue(
+              ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-2.0-flash"].includes(
+                this.plugin.settings.geminiModel,
+              )
+                ? this.plugin.settings.geminiModel
+                : "custom",
+            )
+            .onChange(async (value) => {
+              if (value !== "custom") {
+                this.plugin.settings.geminiModel = value;
+                await this.plugin.saveSettings();
+                this.display();
+              }
+            });
+        })
+        .addText((text) => {
+          const isCustom = !["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-2.0-flash"].includes(
+            this.plugin.settings.geminiModel,
+          );
+          if (isCustom) {
+            text.setPlaceholder("Enter custom model name...");
+            this.bindTextSetting(text, this.plugin.settings.geminiModel, (value) => {
+              this.plugin.settings.geminiModel = value;
+            });
+          } else {
+            text.inputEl.style.display = "none";
+          }
+        });
+    }
+
+    containerEl.createEl("h3", { text: "AI Settings" });
+
+    new Setting(containerEl)
       .setName("Enable AI synthesis")
-      .setDesc("Use OpenAI for synthesis, question answering, and topic pages when configured.")
+      .setDesc("Use AI for synthesis, question answering, and topic pages when configured.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.enableAISummaries).onChange(async (value) => {
           this.plugin.settings.enableAISummaries = value;
@@ -156,48 +368,6 @@ export class BrainSettingTab extends PluginSettingTab {
           this.plugin.settings.enableAIRouting = value;
           await this.plugin.saveSettings();
         }),
-      );
-
-    new Setting(containerEl)
-      .setName("OpenAI API key")
-      .setDesc("Stored locally in plugin settings.")
-      .addText((text) => {
-        text.inputEl.type = "password";
-        text.setPlaceholder("sk-...");
-        this.bindTextSetting(
-          text,
-          this.plugin.settings.openAIApiKey,
-          (value) => {
-            this.plugin.settings.openAIApiKey = value;
-          },
-          (value) => {
-            if (value && !value.startsWith("sk-")) {
-              new Notice("OpenAI API key should start with 'sk-'");
-              return false;
-            }
-            return true;
-          },
-        );
-      });
-
-    new Setting(containerEl)
-      .setName("OpenAI model")
-      .setDesc("Model name used for synthesis, questions, topic pages, and routing requests.")
-      .addText((text) =>
-        this.bindTextSetting(
-          text,
-          this.plugin.settings.openAIModel,
-          (value) => {
-            this.plugin.settings.openAIModel = value;
-          },
-          (value) => {
-            if (value && !value.trim()) {
-              new Notice("OpenAI model name cannot be empty");
-              return false;
-            }
-            return true;
-          },
-        ),
       );
 
     containerEl.createEl("h3", { text: "Context Collection" });

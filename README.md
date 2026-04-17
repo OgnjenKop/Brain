@@ -34,7 +34,8 @@ The core promise is simple:
 - create durable topic pages from an explicit topic and vault context
 - vault-wide questions exclude Brain-generated summaries and review logs to avoid recursion
 - choose between summarize, task extraction, decision extraction, open-question extraction, clean-note rewriting, and project-brief drafting
-- OpenAI summaries and sidebar auto-routing when configured
+- OpenAI and Gemini synthesis and sidebar auto-routing when configured
+- OAuth-style browser authentication for easy provider connection
 - command palette actions plus a persistent sidebar
 
 Topic pages are the flagship artifact. They turn chosen context into reusable markdown you can revisit, expand, and link across the vault.
@@ -131,8 +132,11 @@ Without AI:
 
 With AI enabled:
 
-- synthesis, questions, summaries, and topic pages can use OpenAI
+- synthesis, questions, summaries, and topic pages can use OpenAI or Google Gemini
 - sidebar auto-route can classify capture text as `note`, `task`, or `journal`
+- browser-based authentication for easy connection to providers
+- support for custom OpenAI-compatible endpoints (Ollama, LM Studio, etc.)
+- session/access token support for ChatGPT Plus subscriptions
 
 Brain is designed around query and synthesis over explicit vault context, not generic chat or autonomous behavior.
 It turns chosen context into durable markdown in `Brain/notes/`.
@@ -185,8 +189,11 @@ AI:
 
 - enable AI synthesis
 - enable AI routing
-- OpenAI API key (must start with "sk-")
-- OpenAI model
+- AI Provider (OpenAI/ChatGPT or Google Gemini)
+- Provider authentication (Connect/Disconnect via browser)
+- API key / Session token storage
+- OpenAI base URL (for custom proxies or local LLMs)
+- Model selection (dropdown with common models or custom entry)
 
 Context collection:
 
@@ -201,7 +208,7 @@ UI:
 
 - collapsed sidebar sections (persists your section collapse preferences)
 
-Default model: `gpt-4.1-mini`
+Default models: `gpt-4o-mini` (OpenAI), `gemini-1.5-flash` (Gemini)
 
 ## Development
 
@@ -216,7 +223,8 @@ npm run build
 ## Privacy
 
 - all user content stays in the vault as markdown files
-- OpenAI requests are only made when AI settings are enabled and configured
+- OpenAI/Gemini requests are only made when AI settings are enabled and configured
+- requests use official provider endpoints unless overridden by a custom base URL
 - the plugin does not use embeddings, a vector database, or a backend service
 
 ## License

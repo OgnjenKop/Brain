@@ -84,7 +84,19 @@ export class BrainSidebarView extends ItemView {
       this.reviewHistoryEl.setText(`Review history: ${reviewCount} entries`);
     }
     if (this.aiStatusEl) {
-      this.aiStatusEl.setText(this.plugin.getAiStatusText());
+      this.aiStatusEl.empty();
+      const statusText = this.plugin.getAiStatusText();
+      this.aiStatusEl.createEl("span", { text: `AI: ${statusText} ` });
+
+      const isConnected = statusText.includes("configured");
+      this.aiStatusEl.createEl("button", {
+        cls: "brain-button brain-button-small",
+        text: isConnected ? "Manage" : "Connect",
+      }).addEventListener("click", () => {
+        // Open settings tab
+        (this.app as any).setting.open();
+        (this.app as any).setting.openTabById(this.plugin.manifest.id);
+      });
     }
     if (this.summaryStatusEl) {
       this.summaryStatusEl.setText(this.plugin.getLastSummaryLabel());

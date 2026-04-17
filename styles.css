@@ -74,6 +74,11 @@
   min-height: auto;
 }
 
+.brain-button-small {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
+}
+
 .brain-button-row {
   display: flex;
   flex-wrap: wrap;

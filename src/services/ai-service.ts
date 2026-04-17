@@ -176,17 +176,33 @@ export class BrainAIService {
     settings: BrainPluginSettings,
     messages: Array<{ role: "system" | "user"; content: string }>,
   ): Promise<string> {
-    if (!settings.openAIApiKey.trim()) {
+    if (settings.aiProvider === "gemini") {
+      return this.postGeminiCompletion(settings, messages);
+    }
+    return this.postOpenAICompletion(settings, messages);
+  }
+
+  private async postOpenAICompletion(
+    settings: BrainPluginSettings,
+    messages: Array<{ role: "system" | "user"; content: string }>,
+  ): Promise<string> {
+    const isDefaultUrl = !settings.openAIBaseUrl || settings.openAIBaseUrl.includes("api.openai.com");
+    if (isDefaultUrl && !settings.openAIApiKey.trim()) {
       throw new Error("OpenAI API key is missing");
     }
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (settings.openAIApiKey.trim()) {
+      headers["Authorization"] = `Bearer ${settings.openAIApiKey.trim()}`;
+    }
+
     const result = await requestUrl({
-      url: "https://api.openai.com/v1/chat/completions",
+      url: settings.openAIBaseUrl.trim() || "https://api.openai.com/v1/chat/completions",
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${settings.openAIApiKey.trim()}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         model: settings.openAIModel.trim(),
         messages,
@@ -198,6 +214,54 @@ export class BrainAIService {
     const content = json.choices?.[0]?.message?.content ?? "";
     if (!content.trim()) {
       throw new Error("OpenAI returned an empty response");
+    }
+    return content.trim();
+  }
+
+  private async postGeminiCompletion(
+    settings: BrainPluginSettings,
+    messages: Array<{ role: "system" | "user"; content: string }>,
+  ): Promise<string> {
+    if (!settings.geminiApiKey.trim()) {
+      throw new Error("Gemini API key is missing");
+    }
+
+    const systemMessage = messages.find((m) => m.role === "system");
+    const userMessages = messages.filter((m) => m.role !== "system");
+
+    // Convert OpenAI messages to Gemini format
+    const contents = userMessages.map((m) => ({
+      role: m.role === "user" ? "user" : "model",
+      parts: [{ text: m.content }],
+    }));
+
+    const body: any = {
+      contents,
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+      },
+    };
+
+    if (systemMessage) {
+      body.system_instruction = {
+        parts: [{ text: systemMessage.content }],
+      };
+    }
+
+    const result = await requestUrl({
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiApiKey}`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = result.json;
+    const content = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    if (!content.trim()) {
+      throw new Error("Gemini returned an empty response");
     }
     return content.trim();
   }

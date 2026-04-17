@@ -16,6 +16,7 @@ import { SynthesisResult, SynthesisService } from "./src/services/synthesis-serv
 import { TopicPageService } from "./src/services/topic-page-service";
 import { TaskService } from "./src/services/task-service";
 import { BrainAIService } from "./src/services/ai-service";
+import { BrainAuthService } from "./src/services/auth-service";
 import { VaultService } from "./src/services/vault-service";
 import {
   PromptModal,
@@ -52,6 +53,7 @@ export default class BrainPlugin extends Plugin {
   synthesisService!: SynthesisService;
   topicPageService!: TopicPageService;
   aiService!: BrainAIService;
+  authService!: BrainAuthService;
   summaryService!: SummaryService;
   private sidebarView: BrainSidebarView | null = null;
   private lastSummaryAt: Date | null = null;
@@ -61,6 +63,8 @@ export default class BrainPlugin extends Plugin {
 
     this.vaultService = new VaultService(this.app);
     this.aiService = new BrainAIService();
+    this.authService = new BrainAuthService(this);
+    this.authService.registerProtocol();
     this.inboxService = new InboxService(this.vaultService, () => this.settings);
     this.noteService = new NoteService(this.vaultService, () => this.settings);
     this.taskService = new TaskService(this.vaultService, () => this.settings);
@@ -196,10 +200,19 @@ export default class BrainPlugin extends Plugin {
     if (!this.settings.enableAIRouting) {
       return null;
     }
-    if (!this.settings.openAIApiKey.trim() || !this.settings.openAIModel.trim()) {
-      new Notice("AI routing is enabled but OpenAI is not configured");
-      return null;
+
+    if (this.settings.aiProvider === "openai") {
+      if (!this.settings.openAIApiKey.trim() || !this.settings.openAIModel.trim()) {
+        new Notice("AI routing is enabled but OpenAI is not configured");
+        return null;
+      }
+    } else if (this.settings.aiProvider === "gemini") {
+      if (!this.settings.geminiApiKey.trim() || !this.settings.geminiModel.trim()) {
+        new Notice("AI routing is enabled but Gemini is not configured");
+        return null;
+      }
     }
+
     const route = await this.aiService.routeText(text, this.settings);
     if (route) {
       this.updateSidebarResult(`Auto-routed as ${route}`);
@@ -544,11 +557,18 @@ export default class BrainPlugin extends Plugin {
       return "AI off";
     }
 
-    if (
-      (this.settings.enableAISummaries || this.settings.enableAIRouting) &&
-      (!this.settings.openAIApiKey.trim() || !this.settings.openAIModel.trim())
-    ) {
-      return "AI enabled but missing key";
+    if (this.settings.aiProvider === "openai") {
+      if (!this.settings.openAIApiKey.trim() || !this.settings.openAIModel.trim()) {
+        return "OpenAI enabled but missing key";
+      }
+      return "OpenAI configured";
+    }
+
+    if (this.settings.aiProvider === "gemini") {
+      if (!this.settings.geminiApiKey.trim() || !this.settings.geminiModel.trim()) {
+        return "Gemini enabled but missing key";
+      }
+      return "Gemini configured";
     }
 
     return "AI configured";
