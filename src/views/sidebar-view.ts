@@ -195,25 +195,25 @@ export class BrainSidebarView extends ItemView {
         const buttons = container.createEl("div", { cls: "brain-button-row" });
         buttons.createEl("button", {
           cls: "brain-button",
-          text: "Capture Note",
+          text: "Capture Note (n)",
         }).addEventListener("click", () => {
           void this.saveAsNote();
         });
         buttons.createEl("button", {
           cls: "brain-button",
-          text: "Capture Task",
+          text: "Capture Task (t)",
         }).addEventListener("click", () => {
           void this.saveAsTask();
         });
         buttons.createEl("button", {
           cls: "brain-button",
-          text: "Capture Journal Entry",
+          text: "Capture Journal (j)",
         }).addEventListener("click", () => {
           void this.saveAsJournal();
         });
         buttons.createEl("button", {
           cls: "brain-button",
-          text: "Clear",
+          text: "Clear (c)",
         }).addEventListener("click", () => {
           this.inputEl.value = "";
           new Notice("Capture cleared");
