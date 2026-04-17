@@ -16,6 +16,8 @@ export interface BrainPluginSettings {
   summaryMaxChars: number;
 
   persistSummaries: boolean;
+
+  collapsedSidebarSections: string[];
 }
 
 export const DEFAULT_BRAIN_SETTINGS: BrainPluginSettings = {
@@ -32,6 +34,7 @@ export const DEFAULT_BRAIN_SETTINGS: BrainPluginSettings = {
   summaryLookbackDays: 7,
   summaryMaxChars: 12000,
   persistSummaries: true,
+  collapsedSidebarSections: [],
 };
 
 export function normalizeBrainSettings(
@@ -71,6 +74,9 @@ export function normalizeBrainSettings(
     summaryLookbackDays: clampInteger(merged.summaryLookbackDays, 1, 365, DEFAULT_BRAIN_SETTINGS.summaryLookbackDays),
     summaryMaxChars: clampInteger(merged.summaryMaxChars, 1000, 100000, DEFAULT_BRAIN_SETTINGS.summaryMaxChars),
     persistSummaries: Boolean(merged.persistSummaries),
+    collapsedSidebarSections: Array.isArray(merged.collapsedSidebarSections)
+      ? (merged.collapsedSidebarSections as string[]).filter((s) => typeof s === "string")
+      : DEFAULT_BRAIN_SETTINGS.collapsedSidebarSections,
   };
 }
 

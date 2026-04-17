@@ -42,6 +42,7 @@ export class BrainSidebarView extends ItemView {
       text: "Capture ideas, synthesize explicit context, and save durable markdown artifacts.",
     });
 
+    this.loadCollapsedState();
     this.createCaptureSection();
     this.createTopicPageSection();
     this.createSynthesisSection();
@@ -142,6 +143,16 @@ export class BrainSidebarView extends ItemView {
     } else {
       this.collapsedSections.add(sectionId);
     }
+    this.saveCollapsedState();
+  }
+
+  private loadCollapsedState(): void {
+    this.collapsedSections = new Set(this.plugin.settings.collapsedSidebarSections);
+  }
+
+  private saveCollapsedState(): void {
+    this.plugin.settings.collapsedSidebarSections = Array.from(this.collapsedSections);
+    void this.plugin.saveSettings();
   }
 
   private createCollapsibleSection(
@@ -158,6 +169,10 @@ export class BrainSidebarView extends ItemView {
     const toggleBtn = header.createEl("button", {
       cls: "brain-collapse-toggle",
       text: this.collapsedSections.has(id) ? "▶" : "▼",
+      attr: {
+        "aria-label": this.collapsedSections.has(id) ? `Expand ${title}` : `Collapse ${title}`,
+        "aria-expanded": (!this.collapsedSections.has(id)).toString(),
+      },
     });
     header.createEl("h3", { text: title });
     header.createEl("p", { text: description });
@@ -168,6 +183,8 @@ export class BrainSidebarView extends ItemView {
       if (contentEl) {
         contentEl.toggleAttribute("hidden");
         toggleBtn.setText(this.collapsedSections.has(id) ? "▶" : "▼");
+        toggleBtn.setAttribute("aria-label", this.collapsedSections.has(id) ? `Expand ${title}` : `Collapse ${title}`);
+        toggleBtn.setAttribute("aria-expanded", (!this.collapsedSections.has(id)).toString());
       }
     });
 
