@@ -93,8 +93,9 @@ It includes:
 - optional capture auto-routing when AI routing is enabled
 - status for inbox, tasks, AI, review history, and last artifact
 - output panels for the latest result and last artifact
-- collapsible sections to reduce UI density
+- collapsible sections to reduce UI density (state persists across reloads)
 - keyboard shortcuts for quick capture: n (note), t (task), j (journal), c (clear)
+- accessibility support with ARIA labels on interactive elements
 
 ## Inbox Review
 
@@ -184,7 +185,7 @@ AI:
 
 - enable AI synthesis
 - enable AI routing
-- OpenAI API key
+- OpenAI API key (must start with "sk-")
 - OpenAI model
 
 Context collection:
@@ -195,6 +196,10 @@ Context collection:
 Summary output:
 
 - persist summaries
+
+UI:
+
+- collapsed sidebar sections (persists your section collapse preferences)
 
 Default model: `gpt-4.1-mini`
 
