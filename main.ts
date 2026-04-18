@@ -24,10 +24,12 @@ import {
 } from "./src/views/prompt-modals";
 import { FileGroupPickerModal } from "./src/views/file-group-picker-modal";
 import { InboxReviewModal } from "./src/views/inbox-review-modal";
-import { QuestionScopeModal, QuestionScope } from "./src/views/question-scope-modal";
+import { QuestionScopeModal } from "./src/views/question-scope-modal";
+import { QuestionScope } from "./src/types";
 import { ReviewHistoryModal } from "./src/views/review-history-modal";
 import { SynthesisResultModal } from "./src/views/synthesis-result-modal";
-import { TemplatePickerModal, SynthesisTemplate } from "./src/views/template-picker-modal";
+import { TemplatePickerModal } from "./src/views/template-picker-modal";
+import { SynthesisTemplate } from "./src/types";
 import {
   BRAIN_VIEW_TYPE,
   BrainSidebarView,
@@ -38,6 +40,7 @@ import { formatContextSourceLines } from "./src/utils/context-format";
 import { isUnderFolder } from "./src/utils/path";
 import { registerCommands } from "./src/commands/register-commands";
 import { showError } from "./src/utils/error-handler";
+import { getAppendSeparator, stripLeadingTitle } from "./src/utils/text";
 
 export default class BrainPlugin extends Plugin {
   settings!: BrainPluginSettings;
@@ -57,6 +60,7 @@ export default class BrainPlugin extends Plugin {
   summaryService!: SummaryService;
   private sidebarView: BrainSidebarView | null = null;
   private lastSummaryAt: Date | null = null;
+  private lastArtifactScanAt = 0;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -422,7 +426,7 @@ export default class BrainPlugin extends Plugin {
     const lastLine = editor.lastLine();
     const lastLineText = editor.getLine(lastLine);
     const endPosition = { line: lastLine, ch: lastLineText.length };
-    const separator = this.getAppendSeparator(editor.getValue());
+    const separator = getAppendSeparator(editor.getValue());
     editor.replaceRange(`${separator}${addition}\n`, endPosition);
     return `Inserted synthesis into ${view.file.path}`;
   }
@@ -755,7 +759,7 @@ export default class BrainPlugin extends Plugin {
       `Generated: ${formatDateTimeKey(new Date())}`,
       `Context length: ${context.originalLength} characters.`,
       "",
-      this.stripLeadingTitle(result.content),
+      stripLeadingTitle(result.content),
       "",
     ].join("\n");
   }
@@ -769,7 +773,7 @@ export default class BrainPlugin extends Plugin {
       ...this.buildContextBulletLines(context),
       `- Generated: ${formatDateTimeKey(new Date())}`,
       "",
-      this.stripLeadingTitle(result.content),
+      stripLeadingTitle(result.content),
     ].join("\n");
   }
 
@@ -787,6 +791,11 @@ export default class BrainPlugin extends Plugin {
   }
 
   private async initializeLastArtifactTimestamp(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastArtifactScanAt < 5000) {
+      return;
+    }
+    this.lastArtifactScanAt = now;
     try {
       const files = await this.vaultService.listMarkdownFiles();
       let latest = 0;
@@ -817,36 +826,6 @@ export default class BrainPlugin extends Plugin {
       isUnderFolder(path, this.settings.summariesFolder) ||
       isUnderFolder(path, this.settings.reviewsFolder)
     );
-  }
-
-  private getAppendSeparator(text: string): string {
-    if (!text.trim()) {
-      return "";
-    }
-    if (text.endsWith("\n\n")) {
-      return "";
-    }
-    if (text.endsWith("\n")) {
-      return "\n";
-    }
-    return "\n\n";
-  }
-
-  private stripLeadingTitle(content: string): string {
-    const lines = content.trim().split("\n");
-    if (!lines.length) {
-      return "";
-    }
-
-    if (!/^#\s+/.test(lines[0])) {
-      return content.trim();
-    }
-
-    const remaining = lines.slice(1);
-    while (remaining.length > 0 && !remaining[0].trim()) {
-      remaining.shift();
-    }
-    return remaining.join("\n").trim();
   }
 
   private getActiveSelectionText(): string {

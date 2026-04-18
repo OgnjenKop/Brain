@@ -9,7 +9,7 @@ export class BrainSettingTab extends PluginSettingTab {
     this.plugin = plugin;
 
     // Listen for setting updates (e.g., from auth flow)
-    this.plugin.app.workspace.on("brain:settings-updated", () => {
+    this.plugin.app.workspace.on("brain:settings-updated" as never, () => {
       this.display();
     });
   }

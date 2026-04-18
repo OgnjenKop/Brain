@@ -1,4 +1,4 @@
-import { SynthesisTemplate } from "../views/template-picker-modal";
+import { SynthesisTemplate } from "../types";
 
 export function getSynthesisTemplateTitle(template: SynthesisTemplate): string {
   if (template === "extract-tasks") {

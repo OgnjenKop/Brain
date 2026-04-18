@@ -22,9 +22,10 @@
   "devDependencies": {
     "@types/node": "^22.15.0",
     "esbuild": "^0.25.0",
+    "obsidian": "^1.7.7",
     "typescript": "^5.8.3"
   },
-  "dependencies": {
-    "obsidian": "^1.7.7"
+  "peerDependencies": {
+    "obsidian": ">=1.7.0"
   }
 }

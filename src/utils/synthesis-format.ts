@@ -1,15 +1,5 @@
 import { collapseWhitespace } from "./date";
-
-function formatListSection(items: Set<string>, emptyMessage: string): string {
-  if (!items.size) {
-    return `- ${emptyMessage}`;
-  }
-
-  return Array.from(items)
-    .slice(0, 8)
-    .map((item) => `- ${item}`)
-    .join("\n");
-}
+import { formatListSection, safeCollapseWhitespace } from "./format-helpers";
 
 function addSummaryLine(
   summary: Set<string>,
@@ -26,10 +16,6 @@ function addSummaryLine(
   }
 
   summary.add(cleaned);
-}
-
-function safeCollapseWhitespace(text: string | undefined): string {
-  return collapseWhitespace(text ?? "");
 }
 
 export function buildFallbackSynthesis(content: string): string {

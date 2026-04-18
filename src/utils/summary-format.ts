@@ -1,15 +1,7 @@
+import { formatListSection } from "./format-helpers";
+
 function cleanSummaryLine(text: string | undefined): string {
   return (text ?? "").replace(/\s+/g, " ").trim();
-}
-
-function formatListSection(items: Set<string>, emptyMessage: string): string {
-  if (!items.size) {
-    return `- ${emptyMessage}`;
-  }
-  return Array.from(items)
-    .slice(0, 8)
-    .map((item) => `- ${item}`)
-    .join("\n");
 }
 
 function formatTaskSection(items: Set<string>): string {

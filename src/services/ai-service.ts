@@ -11,9 +11,24 @@ import { normalizeProjectBriefOutput } from "../utils/project-brief-normalize";
 import { normalizeQuestionAnswerOutput } from "../utils/question-answer-normalize";
 import { normalizeTopicPageOutput } from "../utils/topic-page-normalize";
 import { formatContextMetadataLines } from "../utils/context-format";
-import { SynthesisTemplate } from "../views/template-picker-modal";
+import { SynthesisTemplate } from "../types";
 
 type RouteLabel = "note" | "task" | "journal" | null;
+
+interface GeminiContentPart {
+  text: string;
+}
+
+interface GeminiRequestBody {
+  contents: Array<{ role: string; parts: GeminiContentPart[] }>;
+  generationConfig: {
+    temperature: number;
+    maxOutputTokens: number;
+  };
+  system_instruction?: {
+    parts: GeminiContentPart[];
+  };
+}
 
 interface ChatCompletionChoice {
   message?: {
@@ -235,7 +250,7 @@ export class BrainAIService {
       parts: [{ text: m.content }],
     }));
 
-    const body: any = {
+    const body: GeminiRequestBody = {
       contents,
       generationConfig: {
         temperature: 0.2,

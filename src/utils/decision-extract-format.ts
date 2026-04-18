@@ -1,19 +1,4 @@
-import { collapseWhitespace } from "./date";
-
-function formatListSection(items: Set<string>, emptyMessage: string): string {
-  if (!items.size) {
-    return `- ${emptyMessage}`;
-  }
-
-  return Array.from(items)
-    .slice(0, 10)
-    .map((item) => `- ${item}`)
-    .join("\n");
-}
-
-function safeCollapseWhitespace(text: string | undefined): string {
-  return collapseWhitespace(text ?? "");
-}
+import { formatListSection, safeCollapseWhitespace } from "./format-helpers";
 
 function looksLikeRationale(text: string): boolean {
   const lower = text.toLowerCase();

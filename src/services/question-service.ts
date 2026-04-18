@@ -6,6 +6,7 @@ import { buildFallbackQuestionAnswer } from "../utils/question-answer-format";
 import { normalizeQuestionAnswerOutput } from "../utils/question-answer-normalize";
 import { formatDateTimeKey } from "../utils/date";
 import { SynthesisResult } from "./synthesis-service";
+import { isAIConfigured } from "../utils/ai-config";
 
 export class QuestionService {
   constructor(
@@ -20,8 +21,8 @@ export class QuestionService {
     let usedAI = false;
 
     if (settings.enableAISummaries) {
-      if (!settings.openAIApiKey.trim() || !settings.openAIModel.trim()) {
-        new Notice("AI answers are enabled but OpenAI is not configured");
+      if (!isAIConfigured(settings)) {
+        new Notice("AI answers are enabled but no API key is configured");
       } else {
         try {
           content = await this.aiService.answerQuestion(question, context, settings);

@@ -1,13 +1,8 @@
 import { App, Modal, Setting } from "obsidian";
 import { getSynthesisTemplateButtonLabel } from "../utils/synthesis-template";
+import type { SynthesisTemplate } from "../types";
 
-export type SynthesisTemplate =
-  | "summarize"
-  | "extract-tasks"
-  | "extract-decisions"
-  | "extract-open-questions"
-  | "rewrite-clean-note"
-  | "draft-project-brief";
+export type { SynthesisTemplate };
 
 interface TemplatePickerOptions {
   title: string;

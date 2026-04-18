@@ -1,4 +1,5 @@
 import { collapseWhitespace, formatDateTimeKey } from "../utils/date";
+import { slugify, trimTitle } from "../utils/text";
 import { InboxEntry, InboxEntryIdentity, InboxService } from "./inbox-service";
 import { JournalService } from "./journal-service";
 import { TaskService } from "./task-service";
@@ -134,18 +135,4 @@ export class ReviewService {
   }
 }
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "note";
-}
 
-function trimTitle(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed.length <= 60) {
-    return trimmed;
-  }
-  return `${trimmed.slice(0, 57).trimEnd()}...`;
-}

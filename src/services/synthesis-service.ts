@@ -14,8 +14,9 @@ import { buildFallbackCleanNote } from "../utils/clean-note-format";
 import { normalizeCleanNoteOutput } from "../utils/clean-note-normalize";
 import { buildFallbackProjectBrief } from "../utils/project-brief-format";
 import { normalizeProjectBriefOutput } from "../utils/project-brief-normalize";
-import { SynthesisTemplate } from "../views/template-picker-modal";
+import { SynthesisTemplate } from "../types";
 import { getSynthesisTemplateTitle } from "../utils/synthesis-template";
+import { isAIConfigured } from "../utils/ai-config";
 
 export interface SynthesisResult {
   action: string;
@@ -39,8 +40,8 @@ export class SynthesisService {
     let usedAI = false;
 
     if (settings.enableAISummaries) {
-      if (!settings.openAIApiKey.trim() || !settings.openAIModel.trim()) {
-        new Notice("AI summaries are enabled but OpenAI is not configured");
+      if (!isAIConfigured(settings)) {
+        new Notice("AI summaries are enabled but no API key is configured");
       } else {
         try {
           content = await this.aiService.synthesizeContext(template, context, settings);

@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
+import type { QuestionScope } from "../types";
 
-export type QuestionScope = "note" | "group" | "folder" | "vault";
+export type { QuestionScope };
 
 interface QuestionScopeModalOptions {
   title: string;

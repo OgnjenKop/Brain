@@ -5,9 +5,10 @@ import { VaultService } from "./vault-service";
 import {
   joinRecentFilesForSummary,
 } from "../utils/text";
-import { formatDateTimeKey, formatSummaryTimestamp } from "../utils/date";
+import { formatDateTimeKey, formatSummaryTimestamp, getWindowStart } from "../utils/date";
 import { buildFallbackSummary } from "../utils/summary-format";
 import { isUnderFolder } from "../utils/path";
+import { isAIConfigured } from "../utils/ai-config";
 
 export interface SummaryResult {
   content: string;
@@ -37,8 +38,8 @@ export class SummaryService {
     let usedAI = false;
 
     if (settings.enableAISummaries) {
-      if (!settings.openAIApiKey.trim() || !settings.openAIModel.trim()) {
-        new Notice("AI summaries are enabled but OpenAI is not configured");
+      if (!isAIConfigured(settings)) {
+        new Notice("AI summaries are enabled but no API key is configured");
       } else {
         try {
           summary = await this.aiService.summarize(content || summary, settings);
@@ -90,12 +91,4 @@ export class SummaryService {
       .filter((file) => file.stat.mtime >= cutoff)
       .sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
-}
-
-function getWindowStart(lookbackDays: number): Date {
-  const safeDays = Math.max(1, lookbackDays);
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (safeDays - 1));
-  return start;
 }

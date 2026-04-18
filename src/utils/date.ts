@@ -30,6 +30,14 @@ export function trimTrailingNewlines(text: string): string {
   return text.replace(/\n+$/g, "");
 }
 
+export function getWindowStart(lookbackDays: number): Date {
+  const safeDays = Math.max(1, lookbackDays);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (safeDays - 1));
+  return start;
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }

@@ -35,3 +35,49 @@ export async function joinRecentFilesForSummary(
 
   return parts.join("\n\n");
 }
+
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "note";
+}
+
+export function trimTitle(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= 60) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 57).trimEnd()}...`;
+}
+
+export function getAppendSeparator(text: string): string {
+  if (!text.trim()) {
+    return "";
+  }
+  if (text.endsWith("\n\n")) {
+    return "";
+  }
+  if (text.endsWith("\n")) {
+    return "\n";
+  }
+  return "\n\n";
+}
+
+export function stripLeadingTitle(content: string): string {
+  const lines = content.trim().split("\n");
+  if (!lines.length) {
+    return "";
+  }
+
+  if (!/^#\s+/.test(lines[0])) {
+    return content.trim();
+  }
+
+  const remaining = lines.slice(1);
+  while (remaining.length > 0 && !remaining[0].trim()) {
+    remaining.shift();
+  }
+  return remaining.join("\n").trim();
+}

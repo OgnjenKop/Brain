@@ -1,6 +1,13 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import BrainPlugin from "../../main";
 import { showError } from "../utils/error-handler";
+
+interface AppWithSettings extends App {
+  setting: {
+    open(): void;
+    openTabById(id: string): void;
+  };
+}
 
 export const BRAIN_VIEW_TYPE = "brain-sidebar-view";
 
@@ -93,9 +100,9 @@ export class BrainSidebarView extends ItemView {
         cls: "brain-button brain-button-small",
         text: isConnected ? "Manage" : "Connect",
       }).addEventListener("click", () => {
-        // Open settings tab
-        (this.app as any).setting.open();
-        (this.app as any).setting.openTabById(this.plugin.manifest.id);
+        const app = this.app as AppWithSettings;
+        app.setting.open();
+        app.setting.openTabById(this.plugin.manifest.id);
       });
     }
     if (this.summaryStatusEl) {
