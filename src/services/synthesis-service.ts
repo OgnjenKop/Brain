@@ -16,7 +16,7 @@ import { buildFallbackProjectBrief } from "../utils/project-brief-format";
 import { normalizeProjectBriefOutput } from "../utils/project-brief-normalize";
 import { SynthesisTemplate } from "../types";
 import { getSynthesisTemplateTitle } from "../utils/synthesis-template";
-import { isAIConfigured } from "../utils/ai-config";
+import { getAIConfigurationStatus } from "../utils/ai-config";
 
 export interface SynthesisResult {
   action: string;
@@ -40,8 +40,9 @@ export class SynthesisService {
     let usedAI = false;
 
     if (settings.enableAISummaries) {
-      if (!isAIConfigured(settings)) {
-        new Notice("AI summaries are enabled but no API key is configured");
+      const aiStatus = await getAIConfigurationStatus(settings);
+      if (!aiStatus.configured) {
+        new Notice(aiStatus.message);
       } else {
         try {
           content = await this.aiService.synthesizeContext(template, context, settings);

@@ -1,13 +1,14 @@
-import { App, Modal, Notice, Setting } from "obsidian";
-import { InboxEntry, InboxEntryIdentity } from "../services/inbox-service";
-import { ReviewLogEntry } from "../services/review-log-service";
+import { App, Modal, Notice } from "obsidian";
+import { InboxEntry } from "../services/inbox-service";
 import { ReviewService } from "../services/review-service";
 import { showError } from "../utils/error-handler";
+import { getInboxReviewCompletionMessage } from "../utils/inbox-review";
 
 type ReviewAction = "keep" | "task" | "journal" | "note" | "skip";
 
 export class InboxReviewModal extends Modal {
   private currentIndex = 0;
+  private keptCount = 0;
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (event.metaKey || event.ctrlKey || event.altKey) {
       return;
@@ -105,6 +106,7 @@ export class InboxReviewModal extends Modal {
         message = await this.reviewService.promoteToNote(entry);
       } else if (action === "keep") {
         message = await this.reviewService.keepEntry(entry);
+        this.keptCount += 1;
       } else {
         message = await this.reviewService.skipEntry(entry);
       }
@@ -122,7 +124,7 @@ export class InboxReviewModal extends Modal {
       this.currentIndex += 1;
 
       if (this.currentIndex >= this.entries.length) {
-        new Notice("Inbox review complete");
+        new Notice(getInboxReviewCompletionMessage(this.keptCount));
         this.close();
         return;
       }

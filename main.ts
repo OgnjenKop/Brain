@@ -41,6 +41,7 @@ import { isUnderFolder } from "./src/utils/path";
 import { registerCommands } from "./src/commands/register-commands";
 import { showError } from "./src/utils/error-handler";
 import { getAppendSeparator, stripLeadingTitle } from "./src/utils/text";
+import { getAIConfigurationStatus } from "./src/utils/ai-config";
 
 export default class BrainPlugin extends Plugin {
   settings!: BrainPluginSettings;
@@ -60,7 +61,6 @@ export default class BrainPlugin extends Plugin {
   summaryService!: SummaryService;
   private sidebarView: BrainSidebarView | null = null;
   private lastSummaryAt: Date | null = null;
-  private lastArtifactScanAt = 0;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -68,7 +68,6 @@ export default class BrainPlugin extends Plugin {
     this.vaultService = new VaultService(this.app);
     this.aiService = new BrainAIService();
     this.authService = new BrainAuthService(this);
-    this.authService.registerProtocol();
     this.inboxService = new InboxService(this.vaultService, () => this.settings);
     this.noteService = new NoteService(this.vaultService, () => this.settings);
     this.taskService = new TaskService(this.vaultService, () => this.settings);
@@ -111,18 +110,19 @@ export default class BrainPlugin extends Plugin {
       () => this.settings,
     );
 
-    await this.vaultService.ensureKnownFolders(this.settings);
-    await this.initializeLastArtifactTimestamp();
+    try {
+      this.registerView(BRAIN_VIEW_TYPE, (leaf) => {
+        const view = new BrainSidebarView(leaf, this);
+        this.sidebarView = view;
+        return view;
+      });
 
-    this.registerView(BRAIN_VIEW_TYPE, (leaf) => {
-      const view = new BrainSidebarView(leaf, this);
-      this.sidebarView = view;
-      return view;
-    });
+      registerCommands(this);
 
-    registerCommands(this);
-
-    this.addSettingTab(new BrainSettingTab(this.app, this));
+      this.addSettingTab(new BrainSettingTab(this.app, this));
+    } catch (error) {
+      showError(error, "Could not finish loading Brain");
+    }
   }
 
   onunload(): void {
@@ -130,15 +130,19 @@ export default class BrainPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loaded = (await this.loadData()) ?? {};
-    this.settings = normalizeBrainSettings(loaded);
+    try {
+      const loaded = (await this.loadData()) ?? {};
+      this.settings = normalizeBrainSettings(loaded);
+    } catch (error) {
+      showError(error, "Could not load Brain settings");
+      this.settings = normalizeBrainSettings({});
+    }
   }
 
   async saveSettings(): Promise<void> {
     this.settings = normalizeBrainSettings(this.settings);
     await this.saveData(this.settings);
     await this.vaultService.ensureKnownFolders(this.settings);
-    await this.initializeLastArtifactTimestamp();
     await this.refreshSidebarStatus();
   }
 
@@ -205,16 +209,10 @@ export default class BrainPlugin extends Plugin {
       return null;
     }
 
-    if (this.settings.aiProvider === "openai") {
-      if (!this.settings.openAIApiKey.trim() || !this.settings.openAIModel.trim()) {
-        new Notice("AI routing is enabled but OpenAI is not configured");
-        return null;
-      }
-    } else if (this.settings.aiProvider === "gemini") {
-      if (!this.settings.geminiApiKey.trim() || !this.settings.geminiModel.trim()) {
-        new Notice("AI routing is enabled but Gemini is not configured");
-        return null;
-      }
+    const aiStatus = await getAIConfigurationStatus(this.settings);
+    if (!aiStatus.configured) {
+      new Notice(aiStatus.message);
+      return null;
     }
 
     const route = await this.aiService.routeText(text, this.settings);
@@ -556,26 +554,12 @@ export default class BrainPlugin extends Plugin {
     return result;
   }
 
-  getAiStatusText(): string {
+  async getAiStatusText(): Promise<string> {
     if (!this.settings.enableAISummaries && !this.settings.enableAIRouting) {
       return "AI off";
     }
-
-    if (this.settings.aiProvider === "openai") {
-      if (!this.settings.openAIApiKey.trim() || !this.settings.openAIModel.trim()) {
-        return "OpenAI enabled but missing key";
-      }
-      return "OpenAI configured";
-    }
-
-    if (this.settings.aiProvider === "gemini") {
-      if (!this.settings.geminiApiKey.trim() || !this.settings.geminiModel.trim()) {
-        return "Gemini enabled but missing key";
-      }
-      return "Gemini configured";
-    }
-
-    return "AI configured";
+    const aiStatus = await getAIConfigurationStatus(this.settings);
+    return aiStatus.configured ? aiStatus.message.replace(/^Ready to use /, "").replace(/\.$/, "") : aiStatus.message.replace(/\.$/, "");
   }
 
   private async askBrainForContext(
@@ -711,7 +695,7 @@ export default class BrainPlugin extends Plugin {
         onInsert: async () => this.insertSynthesisIntoCurrentNote(result, context),
         onSave: async () => this.saveSynthesisResult(result, context),
         onActionComplete: async (message) => {
-          await this.runSynthesisFlow(context, "summarize");
+          await this.reportActionResult(message);
         },
       }).open();
     } catch (error) {
@@ -788,37 +772,6 @@ export default class BrainPlugin extends Plugin {
   private buildContextBulletLines(context: SynthesisContext): string[] {
     const sourceLines = this.buildContextSourceLines(context);
     return sourceLines.map((line) => `- ${line}`);
-  }
-
-  private async initializeLastArtifactTimestamp(): Promise<void> {
-    const now = Date.now();
-    if (now - this.lastArtifactScanAt < 5000) {
-      return;
-    }
-    this.lastArtifactScanAt = now;
-    try {
-      const files = await this.vaultService.listMarkdownFiles();
-      let latest = 0;
-      for (const file of files) {
-        if (!this.isArtifactFile(file.path)) {
-          continue;
-        }
-        if (file.stat.mtime > latest) {
-          latest = file.stat.mtime;
-        }
-      }
-      this.lastSummaryAt = latest > 0 ? new Date(latest) : null;
-    } catch (error) {
-      showError(error, "Could not initialize last artifact timestamp");
-      this.lastSummaryAt = null;
-    }
-  }
-
-  private isArtifactFile(path: string): boolean {
-    return (
-      isUnderFolder(path, this.settings.notesFolder) ||
-      isUnderFolder(path, this.settings.summariesFolder)
-    );
   }
 
   private isBrainGeneratedFile(path: string): boolean {

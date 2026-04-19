@@ -6,7 +6,7 @@ import { buildFallbackTopicPage } from "../utils/topic-page-format";
 import { normalizeTopicPageOutput } from "../utils/topic-page-normalize";
 import { collapseWhitespace, formatDateTimeKey } from "../utils/date";
 import { SynthesisResult } from "./synthesis-service";
-import { isAIConfigured } from "../utils/ai-config";
+import { getAIConfigurationStatus } from "../utils/ai-config";
 
 export class TopicPageService {
   constructor(
@@ -32,8 +32,9 @@ export class TopicPageService {
     let usedAI = false;
 
     if (settings.enableAISummaries) {
-      if (!isAIConfigured(settings)) {
-        new Notice("AI topic pages are enabled but no API key is configured");
+      const aiStatus = await getAIConfigurationStatus(settings);
+      if (!aiStatus.configured) {
+        new Notice(aiStatus.message);
       } else {
         try {
           content = await this.aiService.createTopicPage(cleanedTopic, context, settings);

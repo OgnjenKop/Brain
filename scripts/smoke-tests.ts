@@ -35,14 +35,22 @@ import {
   InboxVaultService,
   parseInboxEntries,
 } from "../src/services/inbox-service";
+import { ReviewService } from "../src/services/review-service";
 import { parseReviewLogEntries } from "../src/services/review-log-service";
 import { TaskService, TaskVaultService } from "../src/services/task-service";
+import { getInboxReviewCompletionMessage } from "../src/utils/inbox-review";
 import {
   formatDateKey,
   formatDateTimeKey,
   formatSummaryTimestamp,
   formatTimeKey,
 } from "../src/utils/date";
+import {
+  getModelDropdownValue,
+  getNextModelValue,
+  isCustomModelValue,
+} from "../src/utils/model-selection";
+import { parseCodexLoginStatus } from "../src/utils/codex-auth";
 import { isUnderFolder } from "../src/utils/path";
 
 // Test constants
@@ -69,6 +77,23 @@ async function run(): Promise<void> {
   assert.equal(normalized.openAIModel, DEFAULT_BRAIN_SETTINGS.openAIModel);
   assert.equal(normalized.openAIApiKey, "secret");
   assert.equal(normalized.notesFolder, DEFAULT_BRAIN_SETTINGS.notesFolder);
+
+  assert.equal(isCustomModelValue("gpt-4o-mini", ["gpt-4o-mini", "gpt-4o"]), false);
+  assert.equal(isCustomModelValue("my-proxy-model", ["gpt-4o-mini", "gpt-4o"]), true);
+  assert.equal(getModelDropdownValue("gpt-4o-mini", ["gpt-4o-mini", "gpt-4o"]), "gpt-4o-mini");
+  assert.equal(getModelDropdownValue("my-proxy-model", ["gpt-4o-mini", "gpt-4o"]), "custom");
+  assert.equal(getNextModelValue("custom", "gpt-4o-mini", ["gpt-4o-mini", "gpt-4o"]), "");
+  assert.equal(
+    getNextModelValue("custom", "my-proxy-model", ["gpt-4o-mini", "gpt-4o"]),
+    "my-proxy-model",
+  );
+  assert.equal(
+    getNextModelValue("gpt-4o", "my-proxy-model", ["gpt-4o-mini", "gpt-4o"]),
+    "gpt-4o",
+  );
+  assert.equal(parseCodexLoginStatus("Logged in using ChatGPT"), "logged-in");
+  assert.equal(parseCodexLoginStatus("Not logged in"), "logged-out");
+  assert.equal(parseCodexLoginStatus(""), "logged-out");
 
   const date = new Date("2026-04-11T22:15:00");
   assert.equal(formatDateKey(date), "2026-04-11");
@@ -496,6 +521,8 @@ async function run(): Promise<void> {
   await testReopenEdgeCases();
   await testFolderFiltering();
   await testFullCaptureReviewWorkflow();
+  await testKeepLeavesEntryUnreviewed();
+  testInboxReviewCompletionMessage();
 }
 
 /**
@@ -772,6 +799,57 @@ async function testFullCaptureReviewWorkflow() {
   // Step 6: Verify final state
   const finalUnreviewedCount = await inboxService.getUnreviewedCount();
   assert.equal(finalUnreviewedCount, 0);
+}
+
+async function testKeepLeavesEntryUnreviewed() {
+  const fakeVault = new FakeVaultService({
+    "Brain/inbox.md": {
+      text: [
+        "## 2026-04-11 09:00",
+        "- Keep me around",
+      ].join("\n"),
+      mtime: TEST_MTIME_INBOX,
+    },
+    "Brain/tasks.md": {
+      text: "",
+      mtime: TEST_MTIME_TASKS,
+    },
+  });
+
+  const settingsProvider = () => normalizeBrainSettings({});
+  const inboxService = new InboxService(fakeVault, settingsProvider);
+  const reviewService = new ReviewService(
+    fakeVault as never,
+    inboxService,
+    {} as never,
+    {} as never,
+    {
+      appendReviewLog: async () => ({ path: "Brain/reviews/2026-04-11.md" }),
+    } as never,
+    settingsProvider,
+  );
+
+  const [entry] = await inboxService.getRecentEntries();
+  assert.ok(entry);
+
+  const message = await reviewService.keepEntry(entry);
+  assert.match(message, /Left inbox entry in Brain\/inbox\.md/);
+
+  const inboxContent = await fakeVault.readText("Brain/inbox.md");
+  assert.doesNotMatch(inboxContent, /brain-reviewed/);
+  assert.equal(await inboxService.getUnreviewedCount(), 1);
+}
+
+function testInboxReviewCompletionMessage() {
+  assert.equal(getInboxReviewCompletionMessage(0), "Inbox review complete");
+  assert.equal(
+    getInboxReviewCompletionMessage(1),
+    "Review pass complete; 1 entry remains in inbox.",
+  );
+  assert.equal(
+    getInboxReviewCompletionMessage(2),
+    "Review pass complete; 2 entries remain in inbox.",
+  );
 }
 
 class FakeVaultService implements InboxVaultService, TaskVaultService {

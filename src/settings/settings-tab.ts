@@ -1,9 +1,29 @@
 import { App, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian";
 import BrainPlugin from "../../main";
+import {
+  getModelDropdownValue,
+  getNextModelValue,
+  isCustomModelValue,
+} from "../utils/model-selection";
+import { getAIConfigurationStatus } from "../utils/ai-config";
+
+const OPENAI_PRESET_MODELS = [
+  "gpt-4o-mini",
+  "gpt-4o",
+  "o1-mini",
+  "o1-preview",
+  "gpt-3.5-turbo",
+] as const;
+
+const GEMINI_PRESET_MODELS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-1.5-pro",
+  "gemini-2.0-flash",
+] as const;
 
 export class BrainSettingTab extends PluginSettingTab {
   plugin: BrainPlugin;
-
   constructor(app: App, plugin: BrainPlugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -145,25 +165,32 @@ export class BrainSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("AI Provider")
-      .setDesc("Choose which AI provider to use for synthesis and routing.")
+      .setDesc("Choose the provider Brain should use for synthesis, questions, topic pages, and optional auto-routing.")
       .addDropdown((dropdown) =>
         dropdown
           .addOptions({
-            openai: "OpenAI / ChatGPT",
+            openai: "OpenAI API",
+            codex: "OpenAI Codex (ChatGPT)",
             gemini: "Google Gemini",
           })
           .setValue(this.plugin.settings.aiProvider)
           .onChange(async (value) => {
-            this.plugin.settings.aiProvider = value as "openai" | "gemini";
+            this.plugin.settings.aiProvider = value as "openai" | "codex" | "gemini";
             await this.plugin.saveSettings();
             this.display(); // Refresh UI to show relevant fields
           }),
       );
 
+    this.createAIStatusSetting(containerEl);
+
     if (this.plugin.settings.aiProvider === "openai") {
       const authSetting = new Setting(containerEl)
-        .setName("Authentication")
-        .setDesc(this.plugin.settings.openAIApiKey ? "Connected to OpenAI" : "Not connected");
+        .setName("OpenAI setup")
+        .setDesc(
+          this.plugin.settings.openAIApiKey
+            ? "OpenAI is ready. The API key is stored locally in Brain settings."
+            : "Use an OpenAI API key from platform.openai.com, or point Brain at an OpenAI-compatible endpoint below.",
+        );
 
       if (this.plugin.settings.openAIApiKey) {
         authSetting.addButton((button) =>
@@ -179,7 +206,7 @@ export class BrainSettingTab extends PluginSettingTab {
       } else {
         authSetting.addButton((button) =>
           button
-            .setButtonText("Connect OpenAI")
+            .setButtonText("Open OpenAI Setup")
             .setCta()
             .onClick(async () => {
               await this.plugin.authService.login("openai");
@@ -189,10 +216,12 @@ export class BrainSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("OpenAI API key")
-        .setDesc("Stored locally in plugin settings. Can be an API key or a session/access token.")
+        .setDesc(
+          "Stored locally in plugin settings. Use an API key for the default OpenAI endpoint. If you override the base URL below, this field is used as that endpoint's bearer token.",
+        )
         .addText((text) => {
           text.inputEl.type = "password";
-          text.setPlaceholder("Enter key or token...");
+          text.setPlaceholder("Enter OpenAI API key...");
           this.bindTextSetting(
             text,
             this.plugin.settings.openAIApiKey,
@@ -215,24 +244,32 @@ export class BrainSettingTab extends PluginSettingTab {
               "gpt-3.5-turbo": "GPT-3.5 Turbo (Legacy)",
               custom: "Custom Model...",
             })
-            .setValue(
-              ["gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "gpt-3.5-turbo"].includes(
-                this.plugin.settings.openAIModel,
-              )
-                ? this.plugin.settings.openAIModel
-                : "custom",
-            )
+            .setValue(getModelDropdownValue(this.plugin.settings.openAIModel, OPENAI_PRESET_MODELS))
             .onChange(async (value) => {
-              if (value !== "custom") {
-                this.plugin.settings.openAIModel = value;
+              const nextModel = getNextModelValue(
+                value,
+                this.plugin.settings.openAIModel,
+                OPENAI_PRESET_MODELS,
+              );
+              if (nextModel !== null) {
+                this.plugin.settings.openAIModel = nextModel;
+              }
+
+              if (value === "custom" && nextModel !== null) {
+                this.display();
+                return;
+              }
+
+              if (nextModel !== null) {
                 await this.plugin.saveSettings();
                 this.display();
               }
             });
         })
         .addText((text) => {
-          const isCustom = !["gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "gpt-3.5-turbo"].includes(
+          const isCustom = isCustomModelValue(
             this.plugin.settings.openAIModel,
+            OPENAI_PRESET_MODELS,
           );
           if (isCustom) {
             text.setPlaceholder("Enter custom model name...");
@@ -240,14 +277,18 @@ export class BrainSettingTab extends PluginSettingTab {
               this.plugin.settings.openAIModel = value;
             });
           } else {
-            text.inputEl.style.display = "none";
+            text.setPlaceholder("Select Custom Model... to enter a model name");
+            text.setValue("");
+            text.inputEl.disabled = true;
           }
         });
 
       new Setting(containerEl)
 
         .setName("OpenAI base URL")
-        .setDesc("Override the default OpenAI endpoint for custom proxies or local LLMs.")
+        .setDesc(
+          "Override the default OpenAI endpoint for custom proxies or local LLMs. If you set this, the bearer token above is sent to that endpoint.",
+        )
         .addText((text) =>
           this.bindTextSetting(
             text,
@@ -264,10 +305,37 @@ export class BrainSettingTab extends PluginSettingTab {
             },
           ),
         );
+    } else if (this.plugin.settings.aiProvider === "codex") {
+      new Setting(containerEl)
+        .setName("Codex setup")
+        .setDesc(
+          "Use your ChatGPT subscription through the official Codex CLI. Install `@openai/codex`, run `codex login`, then check Brain's sidebar status to confirm Codex is ready.",
+        )
+        .addButton((button) =>
+          button
+            .setButtonText("Open Codex Setup")
+            .setCta()
+            .onClick(async () => {
+              await this.plugin.authService.login("codex");
+            }),
+        );
+
+      new Setting(containerEl)
+        .setName("Codex model")
+        .setDesc("Optional. Leave blank to use the Codex CLI default model for your account.")
+        .addText((text) =>
+          this.bindTextSetting(text, this.plugin.settings.codexModel, (value) => {
+            this.plugin.settings.codexModel = value;
+          }),
+        );
     } else if (this.plugin.settings.aiProvider === "gemini") {
       const authSetting = new Setting(containerEl)
-        .setName("Authentication")
-        .setDesc(this.plugin.settings.geminiApiKey ? "Connected to Google" : "Not connected");
+        .setName("Gemini setup")
+        .setDesc(
+          this.plugin.settings.geminiApiKey
+            ? "Gemini is ready. The API key is stored locally in Brain settings."
+            : "Use a Gemini API key from Google AI Studio, then paste it below.",
+        );
 
       if (this.plugin.settings.geminiApiKey) {
         authSetting.addButton((button) =>
@@ -283,7 +351,7 @@ export class BrainSettingTab extends PluginSettingTab {
       } else {
         authSetting.addButton((button) =>
           button
-            .setButtonText("Connect Google")
+            .setButtonText("Open Gemini Setup")
             .setCta()
             .onClick(async () => {
               await this.plugin.authService.login("gemini");
@@ -293,7 +361,7 @@ export class BrainSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("Gemini API key")
-        .setDesc("Stored locally in plugin settings.")
+        .setDesc("Stored locally in plugin settings. Generated from Google AI Studio.")
         .addText((text) => {
           text.inputEl.type = "password";
           text.setPlaceholder("Enter Gemini API key...");
@@ -318,24 +386,32 @@ export class BrainSettingTab extends PluginSettingTab {
               "gemini-2.0-flash": "Gemini 2.0 Flash (Latest)",
               custom: "Custom Model...",
             })
-            .setValue(
-              ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-2.0-flash"].includes(
-                this.plugin.settings.geminiModel,
-              )
-                ? this.plugin.settings.geminiModel
-                : "custom",
-            )
+            .setValue(getModelDropdownValue(this.plugin.settings.geminiModel, GEMINI_PRESET_MODELS))
             .onChange(async (value) => {
-              if (value !== "custom") {
-                this.plugin.settings.geminiModel = value;
+              const nextModel = getNextModelValue(
+                value,
+                this.plugin.settings.geminiModel,
+                GEMINI_PRESET_MODELS,
+              );
+              if (nextModel !== null) {
+                this.plugin.settings.geminiModel = nextModel;
+              }
+
+              if (value === "custom" && nextModel !== null) {
+                this.display();
+                return;
+              }
+
+              if (nextModel !== null) {
                 await this.plugin.saveSettings();
                 this.display();
               }
             });
         })
         .addText((text) => {
-          const isCustom = !["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-2.0-flash"].includes(
+          const isCustom = isCustomModelValue(
             this.plugin.settings.geminiModel,
+            GEMINI_PRESET_MODELS,
           );
           if (isCustom) {
             text.setPlaceholder("Enter custom model name...");
@@ -343,7 +419,9 @@ export class BrainSettingTab extends PluginSettingTab {
               this.plugin.settings.geminiModel = value;
             });
           } else {
-            text.inputEl.style.display = "none";
+            text.setPlaceholder("Select Custom Model... to enter a model name");
+            text.setValue("");
+            text.inputEl.disabled = true;
           }
         });
     }
@@ -413,6 +491,19 @@ export class BrainSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+  }
+
+  private createAIStatusSetting(containerEl: HTMLElement): void {
+    const statusSetting = new Setting(containerEl)
+      .setName("Provider status")
+      .setDesc("Current readiness for the selected AI provider.");
+    statusSetting.setDesc("Checking provider status...");
+    void this.refreshAIStatus(statusSetting);
+  }
+
+  private async refreshAIStatus(setting: Setting): Promise<void> {
+    const status = await getAIConfigurationStatus(this.plugin.settings);
+    setting.setDesc(status.message);
   }
 
   private bindTextSetting(
