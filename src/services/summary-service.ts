@@ -8,7 +8,7 @@ import {
 import { formatDateTimeKey, formatSummaryTimestamp, getWindowStart } from "../utils/date";
 import { buildFallbackSummary } from "../utils/summary-format";
 import { isUnderFolder } from "../utils/path";
-import { isAIConfigured } from "../utils/ai-config";
+import { getAIConfigurationStatus } from "../utils/ai-config";
 
 export interface SummaryResult {
   content: string;
@@ -38,8 +38,9 @@ export class SummaryService {
     let usedAI = false;
 
     if (settings.enableAISummaries) {
-      if (!isAIConfigured(settings)) {
-        new Notice("AI summaries are enabled but no API key is configured");
+      const aiStatus = await getAIConfigurationStatus(settings);
+      if (!aiStatus.configured) {
+        new Notice(aiStatus.message);
       } else {
         try {
           summary = await this.aiService.summarize(content || summary, settings);

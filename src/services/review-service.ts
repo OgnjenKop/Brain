@@ -33,9 +33,7 @@ export class ReviewService {
   }
 
   async keepEntry(entry: InboxEntry): Promise<string> {
-    await this.appendReviewLogBestEffort(entry, "keep");
-    const markerUpdated = await this.markInboxReviewed(entry, "keep");
-    return this.appendMarkerNote("Kept inbox entry", markerUpdated);
+    return `Left inbox entry in ${this.settingsProvider().inboxFile}`;
   }
 
   async skipEntry(entry: InboxEntry): Promise<string> {
@@ -134,5 +132,4 @@ export class ReviewService {
     }
   }
 }
-
 

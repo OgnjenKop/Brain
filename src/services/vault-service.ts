@@ -12,12 +12,18 @@ export class VaultService {
   constructor(private readonly app: App) {}
 
   async ensureKnownFolders(settings: BrainPluginSettings): Promise<void> {
-    await this.ensureFolder(settings.journalFolder);
-    await this.ensureFolder(settings.notesFolder);
-    await this.ensureFolder(settings.summariesFolder);
-    await this.ensureFolder(settings.reviewsFolder);
-    await this.ensureFolder(parentFolder(settings.inboxFile));
-    await this.ensureFolder(parentFolder(settings.tasksFile));
+    const folders = new Set([
+      settings.journalFolder,
+      settings.notesFolder,
+      settings.summariesFolder,
+      settings.reviewsFolder,
+      parentFolder(settings.inboxFile),
+      parentFolder(settings.tasksFile),
+    ]);
+
+    for (const folder of folders) {
+      await this.ensureFolder(folder);
+    }
   }
 
   async ensureFolder(folderPath: string): Promise<void> {
@@ -32,7 +38,7 @@ export class VaultService {
       current = current ? `${current}/${segment}` : segment;
       const existing = this.app.vault.getAbstractFileByPath(current);
       if (!existing) {
-        await this.app.vault.createFolder(current);
+        await this.createFolderIfMissing(current);
       } else if (!(existing instanceof TFolder)) {
         throw new Error(`Path exists but is not a folder: ${current}`);
       }
@@ -135,6 +141,18 @@ export class VaultService {
 
   async listMarkdownFiles(): Promise<TFile[]> {
     return this.app.vault.getMarkdownFiles();
+  }
+
+  private async createFolderIfMissing(folderPath: string): Promise<void> {
+    try {
+      await this.app.vault.createFolder(folderPath);
+    } catch (error) {
+      const existing = this.app.vault.getAbstractFileByPath(folderPath);
+      if (existing instanceof TFolder) {
+        return;
+      }
+      throw error;
+    }
   }
 }
 

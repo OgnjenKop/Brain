@@ -92,7 +92,7 @@ export class BrainSidebarView extends ItemView {
     }
     if (this.aiStatusEl) {
       this.aiStatusEl.empty();
-      const statusText = this.plugin.getAiStatusText();
+      const statusText = await this.plugin.getAiStatusText();
       this.aiStatusEl.createEl("span", { text: `AI: ${statusText} ` });
 
       const isConnected = statusText.includes("configured");

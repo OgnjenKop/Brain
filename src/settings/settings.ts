@@ -13,7 +13,8 @@ export interface BrainPluginSettings {
   openAIModel: string;
   openAIBaseUrl: string;
 
-  aiProvider: "openai" | "gemini";
+  aiProvider: "openai" | "codex" | "gemini";
+  codexModel: string;
   geminiApiKey: string;
   geminiModel: string;
 
@@ -38,6 +39,7 @@ export const DEFAULT_BRAIN_SETTINGS: BrainPluginSettings = {
   openAIModel: "gpt-4o-mini",
   openAIBaseUrl: "https://api.openai.com/v1/chat/completions",
   aiProvider: "openai",
+  codexModel: "",
   geminiApiKey: "",
   geminiModel: "gemini-1.5-flash",
   summaryLookbackDays: 7,
@@ -84,7 +86,13 @@ export function normalizeBrainSettings(
       typeof merged.openAIBaseUrl === "string" && merged.openAIBaseUrl.trim()
         ? merged.openAIBaseUrl.trim()
         : DEFAULT_BRAIN_SETTINGS.openAIBaseUrl,
-    aiProvider: (merged.aiProvider === "gemini" ? "gemini" : "openai") as "openai" | "gemini",
+    aiProvider:
+      merged.aiProvider === "gemini"
+        ? "gemini"
+        : merged.aiProvider === "codex"
+          ? "codex"
+          : "openai",
+    codexModel: typeof merged.codexModel === "string" ? merged.codexModel.trim() : "",
     geminiApiKey: typeof merged.geminiApiKey === "string" ? merged.geminiApiKey.trim() : "",
     geminiModel:
       typeof merged.geminiModel === "string" && merged.geminiModel.trim()

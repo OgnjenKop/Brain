@@ -34,8 +34,8 @@ The core promise is simple:
 - create durable topic pages from an explicit topic and vault context
 - vault-wide questions exclude Brain-generated summaries and review logs to avoid recursion
 - choose between summarize, task extraction, decision extraction, open-question extraction, clean-note rewriting, and project-brief drafting
-- OpenAI and Gemini synthesis and sidebar auto-routing when configured
-- OAuth-style browser authentication for easy provider connection
+- OpenAI API, OpenAI Codex via ChatGPT, and Gemini synthesis and sidebar auto-routing when configured
+- helper buttons to open the provider API-key pages, with keys stored locally in plugin settings
 - command palette actions plus a persistent sidebar
 
 Topic pages are the flagship artifact. They turn chosen context into reusable markdown you can revisit, expand, and link across the vault.
@@ -110,6 +110,8 @@ Available actions:
 - promote to note
 - skip
 
+`Keep in inbox` leaves the entry unreviewed so you can come back to it later. The other actions record review history and mark the item reviewed.
+
 Keyboard shortcuts:
 
 - `k` keep in inbox
@@ -132,11 +134,12 @@ Without AI:
 
 With AI enabled:
 
-- synthesis, questions, summaries, and topic pages can use OpenAI or Google Gemini
+- synthesis, questions, summaries, and topic pages can use OpenAI API, OpenAI Codex via ChatGPT, or Google Gemini
 - sidebar auto-route can classify capture text as `note`, `task`, or `journal`
-- browser-based authentication for easy connection to providers
+- quick links to the OpenAI and Gemini API-key pages, plus manual key entry in settings
+- Codex support uses the official local Codex CLI and its `Sign in with ChatGPT` flow
 - support for custom OpenAI-compatible endpoints (Ollama, LM Studio, etc.)
-- session/access token support for ChatGPT Plus subscriptions
+- OpenAI uses API keys from the OpenAI platform; custom OpenAI-compatible endpoints can use their own bearer tokens
 
 Brain is designed around query and synthesis over explicit vault context, not generic chat or autonomous behavior.
 It turns chosen context into durable markdown in `Brain/notes/`.
@@ -189,11 +192,12 @@ AI:
 
 - enable AI synthesis
 - enable AI routing
-- AI Provider (OpenAI/ChatGPT or Google Gemini)
-- Provider authentication (Connect/Disconnect via browser)
-- API key / Session token storage
+- AI Provider (OpenAI API, OpenAI Codex via ChatGPT, or Google Gemini)
+- open provider API-key pages and paste keys manually
+- Codex setup via the local `codex login` flow
+- API key storage for OpenAI and Gemini
 - OpenAI base URL (for custom proxies or local LLMs)
-- Model selection (dropdown with common models or custom entry)
+- Model selection (dropdown with common models plus custom entry)
 
 Context collection:
 

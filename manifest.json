@@ -5,6 +5,6 @@
   "minAppVersion": "1.5.0",
   "description": "Markdown-first AI-assisted second brain for Obsidian.",
   "author": "Brain contributors",
-  "isDesktopOnly": false,
+  "isDesktopOnly": true,
   "main": "main.js"
 }

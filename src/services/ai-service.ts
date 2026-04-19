@@ -12,6 +12,7 @@ import { normalizeQuestionAnswerOutput } from "../utils/question-answer-normaliz
 import { normalizeTopicPageOutput } from "../utils/topic-page-normalize";
 import { formatContextMetadataLines } from "../utils/context-format";
 import { SynthesisTemplate } from "../types";
+import { getCodexBinaryPath } from "../utils/codex-auth";
 
 type RouteLabel = "note" | "task" | "journal" | null;
 
@@ -191,10 +192,72 @@ export class BrainAIService {
     settings: BrainPluginSettings,
     messages: Array<{ role: "system" | "user"; content: string }>,
   ): Promise<string> {
+    if (settings.aiProvider === "codex") {
+      return this.postCodexCompletion(settings, messages);
+    }
     if (settings.aiProvider === "gemini") {
       return this.postGeminiCompletion(settings, messages);
     }
     return this.postOpenAICompletion(settings, messages);
+  }
+
+  private async postCodexCompletion(
+    settings: BrainPluginSettings,
+    messages: Array<{ role: "system" | "user"; content: string }>,
+  ): Promise<string> {
+    const { execFileAsync, fs, os, path } = getCodexRuntime();
+    const codexBinary = await getCodexBinaryPath();
+    if (!codexBinary) {
+      throw new Error("Codex CLI is not installed. Install `@openai/codex` and run `codex login` first.");
+    }
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "brain-codex-"));
+    const outputFile = path.join(tempDir, "response.txt");
+    const args = [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--output-last-message",
+      outputFile,
+    ];
+
+    if (settings.codexModel.trim()) {
+      args.push("--model", settings.codexModel.trim());
+    }
+
+    args.push(this.buildCodexPrompt(messages));
+
+    try {
+      await execFileAsync(codexBinary, args, {
+        maxBuffer: 1024 * 1024 * 4,
+        cwd: tempDir,
+      });
+      const content = await fs.readFile(outputFile, "utf8");
+      if (!content.trim()) {
+        throw new Error("Codex returned an empty response");
+      }
+      return content.trim();
+    } catch (error) {
+      if (isEnoentError(error)) {
+        throw new Error("Codex CLI is not installed. Install `@openai/codex` and run `codex login` first.");
+      }
+      throw error;
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private buildCodexPrompt(
+    messages: Array<{ role: "system" | "user"; content: string }>,
+  ): string {
+    return [
+      "You are responding inside Brain, an Obsidian plugin.",
+      "Do not run shell commands, inspect the filesystem, or modify files.",
+      "Use only the content provided below and answer with markdown only.",
+      "",
+      ...messages.map((message) => `${message.role.toUpperCase()}:\n${message.content}`),
+    ].join("\n\n");
   }
 
   private async postOpenAICompletion(
@@ -473,4 +536,38 @@ export class BrainAIService {
     }
     return normalizeSynthesisOutput(response);
   }
+}
+
+function isEnoentError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function getCodexRuntime(): {
+  execFileAsync: (
+    file: string,
+    args?: readonly string[],
+    options?: Record<string, unknown>,
+  ) => Promise<{ stdout: string; stderr: string }>;
+  fs: typeof import("fs").promises;
+  os: typeof import("os");
+  path: typeof import("path");
+} {
+  const req = getNodeRequire();
+  const { execFile } = req("child_process") as typeof import("child_process");
+  const { promisify } = req("util") as typeof import("util");
+
+  return {
+    execFileAsync: promisify(execFile) as (
+      file: string,
+      args?: readonly string[],
+      options?: Record<string, unknown>,
+    ) => Promise<{ stdout: string; stderr: string }>,
+    fs: (req("fs") as typeof import("fs")).promises,
+    os: req("os") as typeof import("os"),
+    path: req("path") as typeof import("path"),
+  };
+}
+
+function getNodeRequire(): NodeRequire {
+  return Function("return require")() as NodeRequire;
 }
