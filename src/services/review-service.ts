@@ -1,15 +1,14 @@
-import { formatDateTimeKey } from "../utils/date";
-import { slugify, buildNoteTitle } from "../utils/text";
+import { buildNoteTitle } from "../utils/text";
 import { InboxEntry, InboxEntryIdentity, InboxService } from "./inbox-service";
 import { JournalService } from "./journal-service";
 import { TaskService } from "./task-service";
 import { ReviewLogEntry, ReviewLogService } from "./review-log-service";
 import { BrainPluginSettings } from "../settings/settings";
-import { VaultService } from "./vault-service";
+import { NoteService } from "./note-service";
 
 export class ReviewService {
   constructor(
-    private readonly vaultService: VaultService,
+    private readonly noteService: NoteService,
     private readonly inboxService: InboxService,
     private readonly taskService: TaskService,
     private readonly journalService: JournalService,
@@ -56,29 +55,23 @@ export class ReviewService {
   }
 
   async promoteToNote(entry: InboxEntry): Promise<string> {
-    const now = new Date();
-    const settings = this.settingsProvider();
-    const notesFolder = settings.notesFolder;
-    await this.vaultService.ensureFolder(notesFolder);
-
     const title = buildNoteTitle(entry);
-    const filename = `${formatDateTimeKey(now).replace(/[: ]/g, "-")}-${slugify(title)}.md`;
-    const path = await this.vaultService.ensureUniqueFilePath(`${notesFolder}/${filename}`);
-    const content = [
-      `# ${title}`,
-      "",
-      `Created: ${formatDateTimeKey(now)}`,
-      "Source: Brain inbox",
-      "",
+    const body = [
       "Original capture:",
       entry.body || entry.preview || entry.heading,
-      "",
     ].join("\n");
-
-    await this.vaultService.appendText(path, content);
+    const saved = await this.noteService.createGeneratedNote(
+      title,
+      body,
+      "Brain inbox",
+      null,
+    );
     await this.appendReviewLogBestEffort(entry, "note");
     const markerUpdated = await this.markInboxReviewed(entry, "note");
-    return this.appendMarkerNote(`Promoted inbox entry to note in ${path}`, markerUpdated);
+    return this.appendMarkerNote(
+      `Promoted inbox entry to note in ${saved.path}`,
+      markerUpdated,
+    );
   }
 
   async reopenFromReviewLog(entry: ReviewLogEntry): Promise<string> {

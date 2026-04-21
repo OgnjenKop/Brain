@@ -104,19 +104,16 @@ export class ReviewLogService {
     const seenPaths = new Set<string>();
     let total = 0;
 
-    const uncachedFiles = logs.filter((file) => {
-      const cached = this.reviewEntryCountCache.get(file.path);
-      return !(cached && cached.mtime === file.stat.mtime);
-    });
+    const uncachedFiles: typeof logs = [];
 
-    const cachedFiles = logs.filter((file) => {
+    for (const file of logs) {
       const cached = this.reviewEntryCountCache.get(file.path);
-      return cached && cached.mtime === file.stat.mtime;
-    });
-
-    for (const file of cachedFiles) {
-      seenPaths.add(file.path);
-      total += this.reviewEntryCountCache.get(file.path)!.count;
+      if (cached && cached.mtime === file.stat.mtime) {
+        seenPaths.add(file.path);
+        total += cached.count;
+      } else {
+        uncachedFiles.push(file);
+      }
     }
 
     if (uncachedFiles.length > 0) {

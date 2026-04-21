@@ -145,6 +145,7 @@ export class VaultService {
 
   async collectMarkdownFiles(options: {
     excludeFolders?: string[];
+    excludePaths?: string[];
     minMtime?: number;
     folderPath?: string;
   } = {}): Promise<TFile[]> {
@@ -154,6 +155,11 @@ export class VaultService {
       for (const folder of options.excludeFolders) {
         files = files.filter((file) => !isUnderFolder(file.path, folder));
       }
+    }
+
+    if (options.excludePaths) {
+      const excluded = new Set(options.excludePaths);
+      files = files.filter((file) => !excluded.has(file.path));
     }
 
     if (options.minMtime !== undefined) {

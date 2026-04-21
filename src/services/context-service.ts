@@ -53,7 +53,8 @@ export class ContextService {
     const settings = this.settingsProvider();
     const cutoff = getWindowStart(settings.summaryLookbackDays).getTime();
     const files = await this.vaultService.collectMarkdownFiles({
-      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder, settings.notesFolder],
+      excludePaths: [settings.inboxFile, settings.tasksFile],
       minMtime: cutoff,
     });
     return this.buildFileGroupContext("Recent files", files, null);
@@ -68,7 +69,8 @@ export class ContextService {
     const folderPath = view.file.parent?.path ?? "";
     const settings = this.settingsProvider();
     const files = await this.vaultService.collectMarkdownFiles({
-      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder, settings.notesFolder],
+      excludePaths: [settings.inboxFile, settings.tasksFile],
       folderPath,
     });
     return this.buildFileGroupContext("Current folder", files, folderPath || null);
@@ -85,7 +87,8 @@ export class ContextService {
   async getVaultContext(): Promise<SynthesisContext> {
     const settings = this.settingsProvider();
     const files = await this.vaultService.collectMarkdownFiles({
-      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder, settings.notesFolder],
+      excludePaths: [settings.inboxFile, settings.tasksFile],
     });
     return this.buildFileGroupContext("Entire vault", files, null);
   }

@@ -66,7 +66,7 @@ export class TopicPageService {
 function ensureTopicBullet(content: string, topic: string): string {
   const normalizedTopic = collapseWhitespace(topic);
   const lines = content.split("\n");
-  const overviewIndex = lines.findIndex((line) => /^##\s+Overview\s*$/.test(line));
+  const overviewIndex = lines.findIndex((line) => /^##\s+Overview\s*$/i.test(line));
   if (overviewIndex === -1) {
     return content;
   }

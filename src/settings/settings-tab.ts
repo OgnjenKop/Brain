@@ -27,11 +27,6 @@ export class BrainSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: BrainPlugin) {
     super(app, plugin);
     this.plugin = plugin;
-
-    // Listen for setting updates (e.g., from auth flow)
-    this.plugin.app.workspace.on("brain:settings-updated" as never, () => {
-      this.display();
-    });
   }
 
   display(): void {

@@ -79,7 +79,7 @@ export default class BrainPlugin extends Plugin {
       () => this.settings,
     );
     this.reviewService = new ReviewService(
-      this.vaultService,
+      this.noteService,
       this.inboxService,
       this.taskService,
       this.journalService,

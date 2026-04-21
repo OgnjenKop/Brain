@@ -819,7 +819,7 @@ async function testKeepLeavesEntryUnreviewed() {
   const settingsProvider = () => normalizeBrainSettings({});
   const inboxService = new InboxService(fakeVault, settingsProvider);
   const reviewService = new ReviewService(
-    fakeVault as never,
+    {} as never,
     inboxService,
     {} as never,
     {} as never,

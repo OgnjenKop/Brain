@@ -3,6 +3,8 @@ import { VaultService } from "../services/vault-service";
 import type { InboxEntry } from "../services/inbox-service";
 import { collapseWhitespace } from "./date";
 
+const READ_BATCH_SIZE = 10;
+
 export async function joinRecentFilesForSummary(
   vaultService: VaultService,
   files: TFile[],
@@ -11,27 +13,35 @@ export async function joinRecentFilesForSummary(
   const parts: string[] = [];
   let total = 0;
 
-  for (const file of files) {
-    try {
-      const content = await vaultService.readText(file.path);
+  for (let i = 0; i < files.length; i += READ_BATCH_SIZE) {
+    const batch = files.slice(i, i + READ_BATCH_SIZE);
+    const texts = await Promise.all(
+      batch.map((file) => vaultService.readText(file.path).catch((error: unknown) => {
+        console.error(error);
+        return "";
+      })),
+    );
+
+    for (let j = 0; j < batch.length; j += 1) {
+      const file = batch[j];
+      const content = texts[j];
       const trimmed = content.trim();
       if (!trimmed) {
         continue;
       }
 
       const block = [`--- ${file.path}`, trimmed].join("\n");
-      if (total + block.length > maxChars) {
-        const remaining = Math.max(0, maxChars - total);
+      const separatorOverhead = parts.length > 0 ? 2 : 0; // "\n\n"
+      if (total + separatorOverhead + block.length > maxChars) {
+        const remaining = Math.max(0, maxChars - total - separatorOverhead);
         if (remaining > 0) {
           parts.push(block.slice(0, remaining));
         }
-        break;
+        return parts.join("\n\n");
       }
 
       parts.push(block);
-      total += block.length;
-    } catch (error) {
-      console.error(error);
+      total += separatorOverhead + block.length;
     }
   }
 

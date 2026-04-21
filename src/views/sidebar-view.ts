@@ -136,6 +136,9 @@ export class BrainSidebarView extends ItemView {
       if (this.isTextInputActive()) {
         return;
       }
+      if (this.isAnyModalOpen()) {
+        return;
+      }
 
       switch (evt.key.toLowerCase()) {
         case "n":
@@ -163,6 +166,10 @@ export class BrainSidebarView extends ItemView {
   private isTextInputActive(): boolean {
     const target = document.activeElement as HTMLElement | null;
     return target !== null && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+  }
+
+  private isAnyModalOpen(): boolean {
+    return document.querySelector(".modal-bg") !== null || document.querySelector(".modal-container") !== null;
   }
 
   private toggleSection(sectionId: string): void {
