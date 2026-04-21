@@ -1,5 +1,9 @@
-import { collapseWhitespace } from "./date";
+import { collapseWhitespace, formatDateTimeKey } from "./date";
 import { formatListSection, safeCollapseWhitespace } from "./format-helpers";
+import type { SynthesisResult } from "../services/synthesis-service";
+import type { SynthesisContext } from "../services/context-service";
+import { formatContextSourceLines } from "./context-format";
+import { stripLeadingTitle } from "./text";
 
 function addSummaryLine(
   summary: Set<string>,
@@ -75,5 +79,32 @@ export function buildFallbackSynthesis(content: string): string {
     "",
     "## Follow-ups",
     formatListSection(followUps, "No follow-ups identified."),
+  ].join("\n");
+}
+
+export function buildSynthesisNoteContent(
+  result: SynthesisResult,
+  context: SynthesisContext,
+): string {
+  return [
+    `Action: ${result.action}`,
+    `Generated: ${formatDateTimeKey(new Date())}`,
+    `Context length: ${context.originalLength} characters.`,
+    "",
+    stripLeadingTitle(result.content),
+    "",
+  ].join("\n");
+}
+
+export function buildInsertedSynthesisContent(
+  result: SynthesisResult,
+  context: SynthesisContext,
+): string {
+  return [
+    `## Brain ${result.title}`,
+    ...formatContextSourceLines(context).map((line) => `- ${line}`),
+    `- Generated: ${formatDateTimeKey(new Date())}`,
+    "",
+    stripLeadingTitle(result.content),
   ].join("\n");
 }

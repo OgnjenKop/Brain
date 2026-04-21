@@ -1,4 +1,4 @@
-import { Notice, TFile } from "obsidian";
+import { Notice } from "obsidian";
 import { BrainAIService } from "./ai-service";
 import { BrainPluginSettings } from "../settings/settings";
 import { VaultService } from "./vault-service";
@@ -7,7 +7,6 @@ import {
 } from "../utils/text";
 import { formatDateTimeKey, formatSummaryTimestamp, getWindowStart } from "../utils/date";
 import { buildFallbackSummary } from "../utils/summary-format";
-import { isUnderFolder } from "../utils/path";
 import { getAIConfigurationStatus } from "../utils/ai-config";
 
 export interface SummaryResult {
@@ -27,7 +26,11 @@ export class SummaryService {
   async generateSummary(lookbackDays?: number, label?: string): Promise<SummaryResult> {
     const settings = this.settingsProvider();
     const effectiveLookbackDays = lookbackDays ?? settings.summaryLookbackDays;
-    const files = await this.collectRecentFiles(settings, effectiveLookbackDays);
+    const cutoff = getWindowStart(effectiveLookbackDays).getTime();
+    const files = await this.vaultService.collectMarkdownFiles({
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+      minMtime: cutoff,
+    });
     const content = await joinRecentFilesForSummary(
       this.vaultService,
       files,
@@ -78,18 +81,5 @@ export class SummaryService {
       usedAI,
       title,
     };
-  }
-
-  private async collectRecentFiles(
-    settings: BrainPluginSettings,
-    lookbackDays: number,
-  ): Promise<TFile[]> {
-    const cutoff = getWindowStart(lookbackDays).getTime();
-    const files = await this.vaultService.listMarkdownFiles();
-    return files
-      .filter((file) => !isUnderFolder(file.path, settings.summariesFolder))
-      .filter((file) => !isUnderFolder(file.path, settings.reviewsFolder))
-      .filter((file) => file.stat.mtime >= cutoff)
-      .sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
 }

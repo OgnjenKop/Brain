@@ -1,6 +1,7 @@
 import { App, ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import BrainPlugin from "../../main";
 import { showError } from "../utils/error-handler";
+import { getAIConfigurationStatus } from "../utils/ai-config";
 
 interface AppWithSettings extends App {
   setting: {
@@ -20,8 +21,10 @@ export class BrainSidebarView extends ItemView {
   private reviewHistoryEl!: HTMLElement;
   private aiStatusEl!: HTMLElement;
   private summaryStatusEl!: HTMLElement;
+  private captureAssistSectionEl!: HTMLElement;
   private isLoading = false;
   private collapsedSections = new Set<string>();
+  private keyboardHandler?: (evt: KeyboardEvent) => void;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: BrainPlugin) {
     super(leaf);
@@ -63,7 +66,10 @@ export class BrainSidebarView extends ItemView {
   }
 
   onClose(): Promise<void> {
-    window.removeEventListener("keydown", this.handleKeyDown);
+    if (this.keyboardHandler) {
+      document.removeEventListener("keydown", this.keyboardHandler);
+      this.keyboardHandler = undefined;
+    }
     return Promise.resolve();
   }
 
@@ -95,10 +101,10 @@ export class BrainSidebarView extends ItemView {
       const statusText = await this.plugin.getAiStatusText();
       this.aiStatusEl.createEl("span", { text: `AI: ${statusText} ` });
 
-      const isConnected = statusText.includes("configured");
+      const aiStatus = await getAIConfigurationStatus(this.plugin.settings);
       this.aiStatusEl.createEl("button", {
         cls: "brain-button brain-button-small",
-        text: isConnected ? "Manage" : "Connect",
+        text: aiStatus.configured ? "Manage" : "Connect",
       }).addEventListener("click", () => {
         const app = this.app as AppWithSettings;
         app.setting.open();
@@ -108,6 +114,7 @@ export class BrainSidebarView extends ItemView {
     if (this.summaryStatusEl) {
       this.summaryStatusEl.setText(this.plugin.getLastSummaryLabel());
     }
+    this.updateCaptureAssistVisibility();
   }
 
   private setLoading(loading: boolean): void {
@@ -122,39 +129,41 @@ export class BrainSidebarView extends ItemView {
   }
 
   private registerKeyboardShortcuts(): void {
-    window.addEventListener("keydown", this.handleKeyDown);
+    this.keyboardHandler = (evt: KeyboardEvent) => {
+      if (evt.metaKey || evt.ctrlKey || evt.altKey) {
+        return;
+      }
+      if (this.isTextInputActive()) {
+        return;
+      }
+
+      switch (evt.key.toLowerCase()) {
+        case "n":
+          evt.preventDefault();
+          void this.saveAsNote();
+          break;
+        case "t":
+          evt.preventDefault();
+          void this.saveAsTask();
+          break;
+        case "j":
+          evt.preventDefault();
+          void this.saveAsJournal();
+          break;
+        case "c":
+          evt.preventDefault();
+          this.inputEl.value = "";
+          new Notice("Capture cleared");
+          break;
+      }
+    };
+    document.addEventListener("keydown", this.keyboardHandler);
   }
 
-  private readonly handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-      return;
-    }
-
-    const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-      return;
-    }
-
-    switch (event.key.toLowerCase()) {
-      case "n":
-        event.preventDefault();
-        void this.saveAsNote();
-        break;
-      case "t":
-        event.preventDefault();
-        void this.saveAsTask();
-        break;
-      case "j":
-        event.preventDefault();
-        void this.saveAsJournal();
-        break;
-      case "c":
-        event.preventDefault();
-        this.inputEl.value = "";
-        new Notice("Capture cleared");
-        break;
-    }
-  };
+  private isTextInputActive(): boolean {
+    const target = document.activeElement as HTMLElement | null;
+    return target !== null && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+  }
 
   private toggleSection(sectionId: string): void {
     if (this.collapsedSections.has(sectionId)) {
@@ -179,7 +188,7 @@ export class BrainSidebarView extends ItemView {
     title: string,
     description: string,
     contentCreator: (container: HTMLElement) => void,
-  ): void {
+  ): HTMLElement {
     const section = this.contentEl.createEl("section", {
       cls: "brain-section",
     });
@@ -212,6 +221,7 @@ export class BrainSidebarView extends ItemView {
       attr: this.collapsedSections.has(id) ? { hidden: "true" } : undefined,
     });
     contentCreator(content);
+    return section;
   }
 
   private createCaptureSection(): void {
@@ -406,11 +416,7 @@ export class BrainSidebarView extends ItemView {
   }
 
   private createCaptureAssistSection(): void {
-    if (!this.plugin.settings.enableAIRouting) {
-      return;
-    }
-
-    this.createCollapsibleSection(
+    this.captureAssistSectionEl = this.createCollapsibleSection(
       "capture-assist",
       "Capture Assist",
       "Use AI only to classify fresh capture into note, task, or journal.",
@@ -424,6 +430,13 @@ export class BrainSidebarView extends ItemView {
         });
       },
     );
+    this.captureAssistSectionEl.toggleAttribute("hidden", !this.plugin.settings.enableAIRouting);
+  }
+
+  private updateCaptureAssistVisibility(): void {
+    if (this.captureAssistSectionEl) {
+      this.captureAssistSectionEl.toggleAttribute("hidden", !this.plugin.settings.enableAIRouting);
+    }
   }
 
   private createStatusSection(): void {

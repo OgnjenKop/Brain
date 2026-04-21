@@ -1,12 +1,12 @@
 import {
   App,
-  TAbstractFile,
   TFile,
   TFolder,
   normalizePath,
 } from "obsidian";
 import { BrainPluginSettings } from "../settings/settings";
 import { formatDateKey } from "../utils/date";
+import { isUnderFolder } from "../utils/path";
 
 export class VaultService {
   constructor(private readonly app: App) {}
@@ -141,6 +141,34 @@ export class VaultService {
 
   async listMarkdownFiles(): Promise<TFile[]> {
     return this.app.vault.getMarkdownFiles();
+  }
+
+  async collectMarkdownFiles(options: {
+    excludeFolders?: string[];
+    minMtime?: number;
+    folderPath?: string;
+  } = {}): Promise<TFile[]> {
+    let files = await this.listMarkdownFiles();
+
+    if (options.excludeFolders) {
+      for (const folder of options.excludeFolders) {
+        files = files.filter((file) => !isUnderFolder(file.path, folder));
+      }
+    }
+
+    if (options.minMtime !== undefined) {
+      files = files.filter((file) => file.stat.mtime >= options.minMtime!);
+    }
+
+    if (options.folderPath !== undefined) {
+      files = files.filter((file) =>
+        options.folderPath
+          ? isUnderFolder(file.path, options.folderPath)
+          : !file.path.includes("/"),
+      );
+    }
+
+    return files.sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
 
   private async createFolderIfMissing(folderPath: string): Promise<void> {

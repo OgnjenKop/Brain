@@ -2,7 +2,6 @@ import { App, MarkdownView, TFile } from "obsidian";
 import { BrainPluginSettings } from "../settings/settings";
 import { VaultService } from "./vault-service";
 import { joinRecentFilesForSummary } from "../utils/text";
-import { isUnderFolder } from "../utils/path";
 import { getWindowStart } from "../utils/date";
 
 export interface SynthesisContext {
@@ -52,7 +51,11 @@ export class ContextService {
 
   async getRecentFilesContext(): Promise<SynthesisContext> {
     const settings = this.settingsProvider();
-    const files = await this.collectRecentMarkdownFiles(settings.summaryLookbackDays);
+    const cutoff = getWindowStart(settings.summaryLookbackDays).getTime();
+    const files = await this.vaultService.collectMarkdownFiles({
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+      minMtime: cutoff,
+    });
     return this.buildFileGroupContext("Recent files", files, null);
   }
 
@@ -63,7 +66,11 @@ export class ContextService {
     }
 
     const folderPath = view.file.parent?.path ?? "";
-    const files = await this.collectFilesInFolder(folderPath);
+    const settings = this.settingsProvider();
+    const files = await this.vaultService.collectMarkdownFiles({
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+      folderPath,
+    });
     return this.buildFileGroupContext("Current folder", files, folderPath || null);
   }
 
@@ -76,7 +83,10 @@ export class ContextService {
   }
 
   async getVaultContext(): Promise<SynthesisContext> {
-    const files = await this.collectVaultMarkdownFiles();
+    const settings = this.settingsProvider();
+    const files = await this.vaultService.collectMarkdownFiles({
+      excludeFolders: [settings.summariesFolder, settings.reviewsFolder],
+    });
     return this.buildFileGroupContext("Entire vault", files, null);
   }
 
@@ -125,38 +135,6 @@ export class ContextService {
     }
 
     return this.buildContext(sourceLabel, sourcePath, text, files.map((file) => file.path));
-  }
-
-  private async collectRecentMarkdownFiles(lookbackDays: number): Promise<TFile[]> {
-    const cutoff = getWindowStart(lookbackDays).getTime();
-    const settings = this.settingsProvider();
-    const files = await this.vaultService.listMarkdownFiles();
-    return files
-      .filter((file) => !isUnderFolder(file.path, settings.summariesFolder))
-      .filter((file) => !isUnderFolder(file.path, settings.reviewsFolder))
-      .filter((file) => file.stat.mtime >= cutoff)
-      .sort((left, right) => right.stat.mtime - left.stat.mtime);
-  }
-
-  private async collectVaultMarkdownFiles(): Promise<TFile[]> {
-    const settings = this.settingsProvider();
-    const files = await this.vaultService.listMarkdownFiles();
-    return files
-      .filter((file) => !isUnderFolder(file.path, settings.summariesFolder))
-      .filter((file) => !isUnderFolder(file.path, settings.reviewsFolder))
-      .sort((left, right) => right.stat.mtime - left.stat.mtime);
-  }
-
-  private async collectFilesInFolder(folderPath: string): Promise<TFile[]> {
-    const settings = this.settingsProvider();
-    const files = await this.vaultService.listMarkdownFiles();
-    return files
-      .filter((file) => !isUnderFolder(file.path, settings.summariesFolder))
-      .filter((file) => !isUnderFolder(file.path, settings.reviewsFolder))
-      .filter((file) =>
-        folderPath ? isUnderFolder(file.path, folderPath) : !file.path.includes("/"),
-      )
-      .sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
 }
 

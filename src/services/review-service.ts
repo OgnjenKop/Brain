@@ -1,5 +1,5 @@
-import { collapseWhitespace, formatDateTimeKey } from "../utils/date";
-import { slugify, trimTitle } from "../utils/text";
+import { formatDateTimeKey } from "../utils/date";
+import { slugify, buildNoteTitle } from "../utils/text";
 import { InboxEntry, InboxEntryIdentity, InboxService } from "./inbox-service";
 import { JournalService } from "./journal-service";
 import { TaskService } from "./task-service";
@@ -61,7 +61,7 @@ export class ReviewService {
     const notesFolder = settings.notesFolder;
     await this.vaultService.ensureFolder(notesFolder);
 
-    const title = this.buildNoteTitle(entry);
+    const title = buildNoteTitle(entry);
     const filename = `${formatDateTimeKey(now).replace(/[: ]/g, "-")}-${slugify(title)}.md`;
     const path = await this.vaultService.ensureUniqueFilePath(`${notesFolder}/${filename}`);
     const content = [
@@ -95,17 +95,6 @@ export class ReviewService {
     }
     await this.appendReviewLogBestEffort(identity, "reopen");
     return `Re-opened inbox entry ${entry.heading}`;
-  }
-
-  buildNoteTitle(entry: InboxEntry): string {
-    const candidate = entry.preview || entry.body || entry.heading;
-    const lines = candidate
-      .split("\n")
-      .map((line) => collapseWhitespace(line))
-      .filter(Boolean);
-
-    const first = lines[0] ?? "Untitled note";
-    return trimTitle(first);
   }
 
   private async markInboxReviewed(entry: InboxEntry, action: string): Promise<boolean> {

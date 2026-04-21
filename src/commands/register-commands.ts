@@ -1,7 +1,32 @@
 import { Plugin } from "obsidian";
-import BrainPlugin from "../../main";
+import type { QuestionScope } from "../types";
 
-export function registerCommands(plugin: BrainPlugin): void {
+interface BrainCommandHost {
+  addCommand: Plugin["addCommand"];
+  captureFromModal(
+    title: string,
+    submitLabel: string,
+    action: (text: string) => Promise<string>,
+    multiline?: boolean,
+  ): Promise<void>;
+  noteService: { appendNote(text: string): Promise<{ path: string }> };
+  taskService: { appendTask(text: string): Promise<{ path: string }> };
+  journalService: { appendEntry(text: string): Promise<{ path: string }> };
+  processInbox(): Promise<void>;
+  openReviewHistory(): Promise<void>;
+  generateSummaryForWindow(lookbackDays?: number, label?: string): Promise<unknown>;
+  addTaskFromSelection(): Promise<void>;
+  openTodaysJournal(): Promise<void>;
+  openSidebar(): Promise<void>;
+  synthesizeNotes(): Promise<void>;
+  askAboutCurrentNoteWithTemplate(): Promise<void>;
+  askQuestion(): Promise<void>;
+  askQuestionAboutCurrentNote(): Promise<void>;
+  createTopicPage(): Promise<void>;
+  createTopicPageForScope(scope?: QuestionScope): Promise<void>;
+}
+
+export function registerCommands(plugin: BrainCommandHost): void {
   plugin.addCommand({
     id: "capture-note",
     name: "Brain: Capture Note",

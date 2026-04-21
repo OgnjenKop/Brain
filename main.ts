@@ -1,10 +1,10 @@
-import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
+import { MarkdownView, Notice, Plugin } from "obsidian";
 import {
   BrainPluginSettings,
   normalizeBrainSettings,
 } from "./src/settings/settings";
 import { BrainSettingTab } from "./src/settings/settings-tab";
-import { ContextService, SynthesisContext } from "./src/services/context-service";
+import { ContextService } from "./src/services/context-service";
 import { InboxService } from "./src/services/inbox-service";
 import { JournalService } from "./src/services/journal-service";
 import { NoteService } from "./src/services/note-service";
@@ -12,35 +12,28 @@ import { ReviewLogService } from "./src/services/review-log-service";
 import { ReviewService } from "./src/services/review-service";
 import { QuestionService } from "./src/services/question-service";
 import { SummaryService } from "./src/services/summary-service";
-import { SynthesisResult, SynthesisService } from "./src/services/synthesis-service";
+import { SynthesisService } from "./src/services/synthesis-service";
 import { TopicPageService } from "./src/services/topic-page-service";
 import { TaskService } from "./src/services/task-service";
 import { BrainAIService } from "./src/services/ai-service";
 import { BrainAuthService } from "./src/services/auth-service";
 import { VaultService } from "./src/services/vault-service";
+import { BrainWorkflowService } from "./src/services/workflow-service";
 import {
   PromptModal,
   ResultModal,
 } from "./src/views/prompt-modals";
-import { FileGroupPickerModal } from "./src/views/file-group-picker-modal";
 import { InboxReviewModal } from "./src/views/inbox-review-modal";
-import { QuestionScopeModal } from "./src/views/question-scope-modal";
 import { QuestionScope } from "./src/types";
 import { ReviewHistoryModal } from "./src/views/review-history-modal";
-import { SynthesisResultModal } from "./src/views/synthesis-result-modal";
-import { TemplatePickerModal } from "./src/views/template-picker-modal";
-import { SynthesisTemplate } from "./src/types";
 import {
   BRAIN_VIEW_TYPE,
   BrainSidebarView,
 } from "./src/views/sidebar-view";
 import { formatDateTimeKey } from "./src/utils/date";
 import { SummaryResult } from "./src/services/summary-service";
-import { formatContextSourceLines } from "./src/utils/context-format";
-import { isUnderFolder } from "./src/utils/path";
 import { registerCommands } from "./src/commands/register-commands";
 import { showError } from "./src/utils/error-handler";
-import { getAppendSeparator, stripLeadingTitle } from "./src/utils/text";
 import { getAIConfigurationStatus } from "./src/utils/ai-config";
 
 export default class BrainPlugin extends Plugin {
@@ -59,6 +52,7 @@ export default class BrainPlugin extends Plugin {
   aiService!: BrainAIService;
   authService!: BrainAuthService;
   summaryService!: SummaryService;
+  workflowService!: BrainWorkflowService;
   private sidebarView: BrainSidebarView | null = null;
   private lastSummaryAt: Date | null = null;
 
@@ -108,6 +102,25 @@ export default class BrainPlugin extends Plugin {
     this.topicPageService = new TopicPageService(
       this.aiService,
       () => this.settings,
+    );
+    this.workflowService = new BrainWorkflowService(
+      this.app,
+      () => this.settings,
+      this.contextService,
+      this.synthesisService,
+      this.topicPageService,
+      this.questionService,
+      this.noteService,
+      {
+        updateResult: (text) => this.updateSidebarResult(text),
+        updateSummary: (text) => this.updateSidebarSummary(text),
+        refreshStatus: () => this.refreshSidebarStatusBestEffort(),
+        reportActionResult: (message) => this.reportActionResult(message),
+        hasActiveMarkdownNote: () => this.hasActiveMarkdownNote(),
+        setLastSummaryAt: (date) => {
+          this.lastSummaryAt = date;
+        },
+      },
     );
 
     try {
@@ -223,153 +236,47 @@ export default class BrainPlugin extends Plugin {
   }
 
   async askAboutCurrentNote(): Promise<void> {
-    await this.askBrainForContext(
-      () => this.contextService.getCurrentNoteContext(),
-      "Summarize Current Note",
-      "summarize",
-    );
+    await this.workflowService.askAboutCurrentNote("summarize");
   }
 
   async askAboutCurrentNoteWithTemplate(): Promise<void> {
-    await this.askBrainForContext(
-      () => this.contextService.getCurrentNoteContext(),
-      "Synthesize Current Note",
-    );
+    await this.workflowService.askAboutCurrentNote();
   }
 
   async askAboutSelection(): Promise<void> {
-    await this.askBrainForContext(
-      () => this.contextService.getSelectedTextContext(),
-      "Extract Tasks From Selection",
-      "extract-tasks",
-    );
+    await this.workflowService.askAboutSelection();
   }
 
   async askAboutRecentFiles(): Promise<void> {
-    await this.askBrainForContext(
-      () => this.contextService.getRecentFilesContext(),
-      "Clean Note From Recent Files",
-      "rewrite-clean-note",
-    );
+    await this.workflowService.askAboutRecentFiles();
   }
 
   async askAboutCurrentFolder(): Promise<void> {
-    await this.askBrainForContext(
-      () => this.contextService.getCurrentFolderContext(),
-      "Draft Brief From Current Folder",
-      "draft-project-brief",
-    );
+    await this.workflowService.askAboutCurrentFolder();
   }
 
   async synthesizeNotes(): Promise<void> {
-    try {
-      const scope = await new QuestionScopeModal(this.app, {
-        title: "Synthesize Notes",
-      }).openPicker();
-      if (!scope) {
-        return;
-      }
-
-      const context = await this.resolveContextForScope(
-        scope,
-        "Select Notes to Synthesize",
-      );
-      if (!context) {
-        return;
-      }
-
-      const template = await this.pickSynthesisTemplate("Synthesize Notes");
-      if (!template) {
-        return;
-      }
-
-      await this.runSynthesisFlow(context, template);
-    } catch (error) {
-      showError(error, "Could not synthesize these notes");
-    }
+    await this.workflowService.synthesizeNotes();
   }
 
   async askQuestionAboutCurrentNote(): Promise<void> {
-    await this.askQuestionForScope("note");
+    await this.workflowService.askQuestionAboutCurrentNote();
   }
 
   async askQuestionAboutCurrentFolder(): Promise<void> {
-    await this.askQuestionForScope("folder");
+    await this.workflowService.askQuestionAboutCurrentFolder();
   }
 
   async askQuestion(): Promise<void> {
-    try {
-      const scope = await new QuestionScopeModal(this.app, {
-        title: "Ask Question",
-      }).openPicker();
-      if (!scope) {
-        return;
-      }
-
-      await this.askQuestionForScope(scope);
-    } catch (error) {
-      showError(error, "Could not ask Brain");
-    }
+    await this.workflowService.askQuestion();
   }
 
   async createTopicPage(): Promise<void> {
-    await this.createTopicPageForScope();
+    await this.workflowService.createTopicPage();
   }
 
   async createTopicPageForScope(defaultScope?: QuestionScope): Promise<void> {
-    try {
-      const topic = await new PromptModal(this.app, {
-        title: "Create Topic Page",
-        placeholder: "Topic or question to turn into a wiki page...",
-        submitLabel: "Create",
-        multiline: true,
-      }).openPrompt();
-      if (!topic) {
-        return;
-      }
-
-      const scope = defaultScope ?? await new QuestionScopeModal(this.app, {
-        title: "Create Topic Page",
-      }).openPicker();
-      if (!scope) {
-        return;
-      }
-
-      const context = await this.resolveContextForScope(
-        scope,
-        "Select Notes for Topic Page",
-      );
-      if (!context) {
-        return;
-      }
-
-      const result = await this.topicPageService.createTopicPage(topic, context);
-      const saved = await this.noteService.createGeneratedNote(
-        result.noteTitle,
-        result.content,
-        context.sourceLabel,
-        context.sourcePath,
-        context.sourcePaths,
-      );
-
-      this.lastSummaryAt = new Date();
-      this.updateSidebarSummary(result.content);
-      this.updateSidebarResult(
-        result.usedAI
-          ? `AI topic page saved to ${saved.path}`
-          : `Topic page saved to ${saved.path}`,
-      );
-      await this.refreshSidebarStatusBestEffort();
-      new Notice(`Topic page saved to ${saved.path}`);
-
-      const leaf = this.app.workspace.getLeaf(false) ?? this.app.workspace.getRightLeaf(false);
-      if (leaf) {
-        await leaf.openFile(saved);
-        this.app.workspace.revealLeaf(leaf);
-      }
-    } catch (error) {
-      showError(error, "Could not create that topic page");
-    }
+    await this.workflowService.createTopicPage(defaultScope);
   }
 
   async generateSummaryForWindow(
@@ -394,39 +301,6 @@ export default class BrainPlugin extends Plugin {
       new ResultModal(this.app, `Brain ${result.title}`, result.content).open();
     }
     return result;
-  }
-
-  async saveSynthesisResult(
-    result: SynthesisResult,
-    context: SynthesisContext,
-  ): Promise<string> {
-    const saved = await this.noteService.createGeneratedNote(
-      result.noteTitle,
-      this.buildSynthesisNoteContent(result, context),
-      context.sourceLabel,
-      context.sourcePath,
-      context.sourcePaths,
-    );
-    return `Saved artifact to ${saved.path}`;
-  }
-
-  async insertSynthesisIntoCurrentNote(
-    result: SynthesisResult,
-    context: SynthesisContext,
-  ): Promise<string> {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
-      throw new Error("Open a markdown note first");
-    }
-
-    const addition = this.buildInsertedSynthesisContent(result, context);
-    const editor = view.editor;
-    const lastLine = editor.lastLine();
-    const lastLineText = editor.getLine(lastLine);
-    const endPosition = { line: lastLine, ch: lastLineText.length };
-    const separator = getAppendSeparator(editor.getValue());
-    editor.replaceRange(`${separator}${addition}\n`, endPosition);
-    return `Inserted synthesis into ${view.file.path}`;
   }
 
   async captureFromModal(
@@ -491,7 +365,7 @@ export default class BrainPlugin extends Plugin {
   }
 
   async addTaskFromSelection(): Promise<void> {
-    const selection = this.getActiveSelectionText();
+    const selection = this.workflowService.getActiveSelectionText();
     if (selection) {
       const saved = await this.taskService.appendTask(selection);
       const message = `Saved task from selection to ${saved.path}`;
@@ -559,231 +433,15 @@ export default class BrainPlugin extends Plugin {
       return "AI off";
     }
     const aiStatus = await getAIConfigurationStatus(this.settings);
-    return aiStatus.configured ? aiStatus.message.replace(/^Ready to use /, "").replace(/\.$/, "") : aiStatus.message.replace(/\.$/, "");
-  }
-
-  private async askBrainForContext(
-    resolver: () => Promise<SynthesisContext>,
-    modalTitle: string,
-    defaultTemplate?: SynthesisTemplate,
-  ): Promise<void> {
-    try {
-      const context = await resolver();
-      const template = defaultTemplate ?? (await this.pickSynthesisTemplate(modalTitle));
-      if (!template) {
-        return;
-      }
-
-      await this.runSynthesisFlow(context, template);
-    } catch (error) {
-      showError(error, "Could not synthesize that context");
+    if (!aiStatus.configured) {
+      return aiStatus.message.replace(/\.$/, "");
     }
-  }
-
-  private async askQuestionForScope(scope: QuestionScope): Promise<void> {
-    switch (scope) {
-      case "note":
-        await this.askQuestionWithContext(
-          () => this.contextService.getCurrentNoteContext(),
-          "Ask Question About Current Note",
-        );
-        return;
-      case "folder":
-        await this.askQuestionWithContext(
-          () => this.contextService.getCurrentFolderContext(),
-          "Ask Question About Current Folder",
-        );
-        return;
-      case "vault":
-        await this.askQuestionWithContext(
-          () => this.contextService.getVaultContext(),
-          "Ask Question About Entire Vault",
-        );
-        return;
-      case "group":
-        await this.askQuestionAboutSelectedGroup();
-        return;
-      default:
-        return;
-    }
-  }
-
-  private async resolveContextForScope(
-    scope: QuestionScope,
-    groupPickerTitle: string,
-  ): Promise<SynthesisContext | null> {
-    switch (scope) {
-      case "note":
-        return await this.contextService.getCurrentNoteContext();
-      case "folder":
-        return await this.contextService.getCurrentFolderContext();
-      case "vault":
-        return await this.contextService.getVaultContext();
-      case "group": {
-        const files = await this.pickSelectedMarkdownFiles(groupPickerTitle);
-        if (!files || !files.length) {
-          return null;
-        }
-        return await this.contextService.getSelectedFilesContext(files);
-      }
-      default:
-        return null;
-    }
-  }
-
-  private async askQuestionAboutSelectedGroup(): Promise<void> {
-    try {
-      const files = await this.pickSelectedMarkdownFiles("Select Notes");
-      if (!files || !files.length) {
-        return;
-      }
-
-      await this.askQuestionWithContext(
-        () => this.contextService.getSelectedFilesContext(files),
-        "Ask Question About Selected Notes",
-      );
-    } catch (error) {
-      showError(error, "Could not select notes for Brain");
-    }
-  }
-
-  private async pickSelectedMarkdownFiles(title: string): Promise<TFile[] | null> {
-    const files = this.app.vault
-      .getMarkdownFiles()
-      .filter((file) => !this.isBrainGeneratedFile(file.path))
-      .sort((left, right) => right.stat.mtime - left.stat.mtime);
-
-    if (!files.length) {
-      new Notice("No markdown files found");
-      return null;
-    }
-
-    return await new FileGroupPickerModal(this.app, files, {
-      title,
-    }).openPicker();
-  }
-
-  private async askQuestionWithContext(
-    resolver: () => Promise<SynthesisContext>,
-    modalTitle: string,
-  ): Promise<void> {
-    try {
-      const context = await resolver();
-      const question = await new PromptModal(this.app, {
-        title: modalTitle,
-        placeholder: "Ask a question about this context...",
-        submitLabel: "Ask",
-        multiline: true,
-      }).openPrompt();
-      if (!question) {
-        return;
-      }
-
-      const result = await this.questionService.answerQuestion(question, context);
-      this.lastSummaryAt = new Date();
-      this.updateSidebarSummary(result.content);
-      this.updateSidebarResult(
-        result.usedAI
-          ? `AI answer from ${context.sourceLabel}`
-          : `Local answer from ${context.sourceLabel}`,
-      );
-      await this.refreshSidebarStatusBestEffort();
-      new SynthesisResultModal(this.app, {
-        context,
-        result,
-        canInsert: this.hasActiveMarkdownNote(),
-        onInsert: async () => this.insertSynthesisIntoCurrentNote(result, context),
-        onSave: async () => this.saveSynthesisResult(result, context),
-        onActionComplete: async (message) => {
-          await this.reportActionResult(message);
-        },
-      }).open();
-    } catch (error) {
-      showError(error, "Could not answer that question");
-    }
-  }
-
-  private async runSynthesisFlow(
-    context: SynthesisContext,
-    template: SynthesisTemplate,
-  ): Promise<void> {
-    const result = await this.synthesisService.run(template, context);
-    this.lastSummaryAt = new Date();
-    this.updateSidebarSummary(result.content);
-    this.updateSidebarResult(
-      result.usedAI
-        ? `AI ${result.title.toLowerCase()} from ${context.sourceLabel}`
-        : `Local ${result.title.toLowerCase()} from ${context.sourceLabel}`,
-    );
-    await this.refreshSidebarStatusBestEffort();
-    new SynthesisResultModal(this.app, {
-      context,
-      result,
-      canInsert: this.hasActiveMarkdownNote(),
-      onInsert: async () => this.insertSynthesisIntoCurrentNote(result, context),
-      onSave: async () => this.saveSynthesisResult(result, context),
-      onActionComplete: async (message) => {
-        await this.reportActionResult(message);
-      },
-    }).open();
-  }
-
-  private async pickSynthesisTemplate(
-    title: string,
-  ): Promise<SynthesisTemplate | null> {
-    return await new TemplatePickerModal(this.app, { title }).openPicker();
-  }
-
-  private buildSynthesisNoteContent(
-    result: SynthesisResult,
-    context: SynthesisContext,
-  ): string {
-    return [
-      `Action: ${result.action}`,
-      `Generated: ${formatDateTimeKey(new Date())}`,
-      `Context length: ${context.originalLength} characters.`,
-      "",
-      stripLeadingTitle(result.content),
-      "",
-    ].join("\n");
-  }
-
-  private buildInsertedSynthesisContent(
-    result: SynthesisResult,
-    context: SynthesisContext,
-  ): string {
-    return [
-      `## Brain ${result.title}`,
-      ...this.buildContextBulletLines(context),
-      `- Generated: ${formatDateTimeKey(new Date())}`,
-      "",
-      stripLeadingTitle(result.content),
-    ].join("\n");
+    const provider = aiStatus.provider ?? "AI";
+    const model = aiStatus.model ? ` (${aiStatus.model})` : "";
+    return `${provider}${model}`;
   }
 
   private hasActiveMarkdownNote(): boolean {
     return Boolean(this.app.workspace.getActiveViewOfType(MarkdownView)?.file);
-  }
-
-  private buildContextSourceLines(context: SynthesisContext): string[] {
-    return formatContextSourceLines(context);
-  }
-
-  private buildContextBulletLines(context: SynthesisContext): string[] {
-    const sourceLines = this.buildContextSourceLines(context);
-    return sourceLines.map((line) => `- ${line}`);
-  }
-
-  private isBrainGeneratedFile(path: string): boolean {
-    return (
-      isUnderFolder(path, this.settings.summariesFolder) ||
-      isUnderFolder(path, this.settings.reviewsFolder)
-    );
-  }
-
-  private getActiveSelectionText(): string {
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const selection = activeView?.editor?.getSelection()?.trim() ?? "";
-    return selection;
   }
 }

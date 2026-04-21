@@ -1,5 +1,7 @@
 import { TFile } from "obsidian";
 import { VaultService } from "../services/vault-service";
+import type { InboxEntry } from "../services/inbox-service";
+import { collapseWhitespace } from "./date";
 
 export async function joinRecentFilesForSummary(
   vaultService: VaultService,
@@ -80,4 +82,15 @@ export function stripLeadingTitle(content: string): string {
     remaining.shift();
   }
   return remaining.join("\n").trim();
+}
+
+export function buildNoteTitle(entry: InboxEntry): string {
+  const candidate = entry.preview || entry.body || entry.heading;
+  const lines = candidate
+    .split("\n")
+    .map((line) => collapseWhitespace(line))
+    .filter(Boolean);
+
+  const first = lines[0] ?? "Untitled note";
+  return trimTitle(first);
 }
