@@ -121,8 +121,8 @@ export default class BrainPlugin extends Plugin {
     await leaf.openFile(file);
   }
 
-  async chatWithVault(message: string, history: ChatExchange[] = [], signal?: AbortSignal): Promise<VaultChatResponse> {
-    return this.vaultChatService.respond(message, history, signal);
+  async chatWithVault(message: string, history: ChatExchange[] = [], signal?: AbortSignal, onStage?: (stage: "query" | "ai") => void): Promise<VaultChatResponse> {
+    return this.vaultChatService.respond(message, history, signal, onStage);
   }
 
   async applyVaultWritePlan(plan: VaultWritePlan): Promise<string[]> {

@@ -14,13 +14,6 @@ import {
   isKnownCodexModel,
 } from "../utils/codex-models";
 
-interface AppWithSettings extends App {
-  setting?: {
-    open(): void;
-    openTabById(id: string): void;
-  };
-}
-
 interface ChatTurn {
   role: "user" | "brain";
   text: string;
@@ -37,7 +30,7 @@ export class BrainSidebarView extends ItemView {
   private modelRowEl!: HTMLElement;
   private sendButtonEl!: HTMLButtonElement;
   private stopButtonEl!: HTMLButtonElement;
-  private clearButtonEl!: HTMLButtonElement;
+  private promptChipsEl!: HTMLElement;
   private modelOptions: CodexModelOption[] = DEFAULT_CODEX_MODEL_OPTIONS;
   private modelOptionsLoading = false;
   private customModelDraft = false;
@@ -47,6 +40,8 @@ export class BrainSidebarView extends ItemView {
   private loadingTimer: number | null = null;
   private loadingText = "";
   private loadingTextEl: HTMLElement | null = null;
+  private loadingStageEl: HTMLElement | null = null;
+  private loadingStage: "query" | "ai" = "query";
   private renderGeneration = 0;
   private resizeFrameId: number | null = null;
   private turns: ChatTurn[] = [];
@@ -74,14 +69,14 @@ export class BrainSidebarView extends ItemView {
     this.contentEl.addClass("brain-sidebar");
 
     const header = this.contentEl.createEl("div", { cls: "brain-header" });
-    header.createEl("h2", { text: "Brain" });
+    const headerTop = header.createEl("div", { cls: "brain-header-top" });
+    headerTop.createEl("h2", { text: "Brain" });
+    this.modelRowEl = headerTop.createEl("div", { cls: "brain-model-row" });
+    this.renderModelSelector();
+    void this.refreshModelOptions();
     header.createEl("p", {
       text: "Ask your vault, or tell Brain what to file.",
     });
-
-    this.modelRowEl = this.contentEl.createEl("div", { cls: "brain-model-row" });
-    this.renderModelSelector();
-    void this.refreshModelOptions();
 
     const messagesContainer = this.contentEl.createEl("div", { cls: "brain-messages-container" });
     this.messagesEl = messagesContainer.createEl("div", {
@@ -115,7 +110,7 @@ export class BrainSidebarView extends ItemView {
       cls: "brain-chat-input",
       attr: {
         placeholder: "Ask about your vault, or paste rough notes for Brain to file...",
-        rows: "6",
+        rows: "4",
       },
     });
     composer.appendChild(this.inputEl);
@@ -129,41 +124,28 @@ export class BrainSidebarView extends ItemView {
       this.updateComposerState();
     });
 
-    const examples = this.contentEl.createEl("div", { cls: "brain-prompt-chips" });
-    this.createPromptChip(examples, "What do I know about...", "What do I know about ");
-    this.createPromptChip(examples, "File this", "File this in the right place:\n\n");
-    this.createPromptChip(examples, "Find related notes", "Find related notes for ");
+    const chipsRow = this.contentEl.createEl("div", { cls: "brain-chips-row" });
+    this.promptChipsEl = chipsRow.createEl("div", { cls: "brain-prompt-chips" });
+    this.createPromptChip(this.promptChipsEl, "What do I know about...", "What do I know about ");
+    this.createPromptChip(this.promptChipsEl, "File this", "File this in the right place:\n\n");
+    this.createPromptChip(this.promptChipsEl, "Find related notes", "Find related notes for ");
 
-    const buttons = this.contentEl.createEl("div", { cls: "brain-action-row" });
-    this.sendButtonEl = buttons.createEl("button", {
-      cls: "brain-button brain-button-primary",
+    const actions = chipsRow.createEl("div", { cls: "brain-actions" });
+    this.sendButtonEl = actions.createEl("button", {
+      cls: "brain-button brain-button-primary brain-button-send",
       text: "Send",
     });
     this.sendButtonEl.addEventListener("click", () => {
       void this.sendMessage();
     });
-    this.stopButtonEl = buttons.createEl("button", {
-      cls: "brain-button brain-button-stop",
+    this.stopButtonEl = actions.createEl("button", {
+      cls: "brain-button brain-button-stop brain-button-send brain-button-hidden",
       text: "Stop",
     });
     this.stopButtonEl.addEventListener("click", () => {
       this.stopCurrentRequest();
     });
-    this.stopButtonEl.disabled = true;
-    buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Instructions",
-    }).addEventListener("click", () => {
-      void this.plugin.openInstructionsFile();
-    });
-    this.clearButtonEl = buttons.createEl("button", {
-      cls: "brain-button",
-      text: "Clear",
-    });
-    this.clearButtonEl.addEventListener("click", () => {
-      this.turns = [];
-      void this.renderMessages();
-    });
+    this.stopButtonEl.hidden = true;
 
     this.statusEl = this.contentEl.createEl("div", { cls: "brain-chat-status" });
     this.updateComposerState();
@@ -185,34 +167,21 @@ export class BrainSidebarView extends ItemView {
       return;
     }
     this.statusEl.empty();
-    let aiConfigured = false;
-    let statusText = "Could not check Codex";
-    let buttonText = "Connect";
+    let statusText = "Not connected";
     try {
       const aiStatus = await getAIConfigurationStatus(this.plugin.settings);
-      aiConfigured = aiStatus.configured;
-      statusText = formatProviderStatus(aiStatus);
-      buttonText = aiConfigured ? "Manage" : "Connect";
+      if (aiStatus.configured) {
+        statusText = aiStatus.model || "Connected";
+      }
     } catch (error) {
       console.error(error);
     }
 
     const indicator = this.statusEl.createEl("span", {
-      cls: `brain-status-indicator ${aiConfigured ? "brain-status-indicator--ok" : "brain-status-indicator--warn"}`,
+      cls: `brain-status-indicator ${statusText !== "Not connected" ? "brain-status-indicator--ok" : "brain-status-indicator--warn"}`,
     });
     indicator.setAttribute("aria-hidden", "true");
-    this.statusEl.createEl("span", { text: `AI: ${statusText} ` });
-    this.statusEl.createEl("button", {
-      cls: "brain-button brain-button-small",
-      text: buttonText,
-    }).addEventListener("click", () => {
-      const app = this.app as AppWithSettings;
-      if (!app.setting) {
-        return;
-      }
-      app.setting.open();
-      app.setting.openTabById(this.plugin.manifest.id);
-    });
+    this.statusEl.createEl("span", { text: statusText });
   }
 
   private async sendMessage(): Promise<void> {
@@ -225,12 +194,15 @@ export class BrainSidebarView extends ItemView {
     this.updateComposerState();
     this.userScrolledUp = false;
     this.addTurn("user", message);
-    this.setLoading(true);
+    this.setLoading(true, "query");
     const controller = new AbortController();
     this.currentAbortController = controller;
     try {
       const history = this.buildChatHistory();
-      const response = await this.plugin.chatWithVault(message, history, controller.signal);
+      const response = await this.plugin.chatWithVault(message, history, controller.signal, (stage) => {
+        this.loadingStage = stage;
+        this.updateLoadingText();
+      });
       this.renderResponse(response);
     } catch (error) {
       if (isStoppedRequest(error)) {
@@ -274,10 +246,6 @@ export class BrainSidebarView extends ItemView {
 
   private renderModelSelector(): void {
     this.modelRowEl.empty();
-    this.modelRowEl.createEl("span", {
-      cls: "brain-model-label",
-      text: "Model",
-    });
     if (this.modelOptionsLoading) {
       this.modelRowEl.createEl("span", {
         cls: "brain-model-active",
@@ -389,8 +357,9 @@ export class BrainSidebarView extends ItemView {
     }
   }
 
-  private setLoading(loading: boolean): void {
+  private setLoading(loading: boolean, stage: "query" | "ai" = "query"): void {
     this.isLoading = loading;
+    this.loadingStage = stage;
     if (loading) {
       this.loadingStartedAt = Date.now();
       this.updateLoadingText();
@@ -402,17 +371,13 @@ export class BrainSidebarView extends ItemView {
       this.removeLoadingIndicator();
     }
     this.inputEl.disabled = loading;
-    this.clearButtonEl.disabled = loading;
-    this.stopButtonEl.disabled = !loading;
-    this.sendButtonEl.disabled = loading || !this.inputEl.value.trim();
+    this.sendButtonEl.hidden = loading;
+    this.stopButtonEl.hidden = !loading;
     this.renderModelSelector();
   }
 
   private updateComposerState(): void {
     this.autoResizeInput();
-    if (this.sendButtonEl) {
-      this.sendButtonEl.disabled = this.isLoading || !this.inputEl.value.trim();
-    }
   }
 
   private autoResizeInput(): void {
@@ -448,6 +413,10 @@ export class BrainSidebarView extends ItemView {
     const emptyEl = this.messagesEl.querySelector(".brain-chat-empty");
     if (emptyEl) {
       emptyEl.remove();
+    }
+
+    if (this.promptChipsEl) {
+      this.promptChipsEl.hidden = true;
     }
 
     this.removeLoadingIndicator();
@@ -502,8 +471,14 @@ export class BrainSidebarView extends ItemView {
     dots.createEl("span");
     dots.createEl("span");
     dots.createEl("span");
-    this.loadingTextEl = loading.createEl("span", {
-      text: this.loadingText || "Reading vault context and asking Codex...",
+    const meta = loading.createEl("div", { cls: "brain-loading-meta" });
+    this.loadingStageEl = meta.createEl("span", {
+      cls: "brain-loading-stage",
+      text: "Searching vault…",
+    });
+    this.loadingTextEl = meta.createEl("span", {
+      cls: "brain-loading-time",
+      text: "0s",
     });
     this.maybeScrollToBottom();
   }
@@ -514,14 +489,21 @@ export class BrainSidebarView extends ItemView {
       loadingEl.remove();
     }
     this.loadingTextEl = null;
+    this.loadingStageEl = null;
   }
 
   private async renderMessages(): Promise<void> {
     const generation = ++this.renderGeneration;
     this.messagesEl.empty();
     if (!this.turns.length) {
+      if (this.promptChipsEl) {
+        this.promptChipsEl.hidden = false;
+      }
       this.renderEmptyState();
       return;
+    }
+    if (this.promptChipsEl) {
+      this.promptChipsEl.hidden = true;
     }
     for (const turn of this.turns) {
       if (generation !== this.renderGeneration) {
@@ -578,10 +560,13 @@ export class BrainSidebarView extends ItemView {
 
   private updateLoadingText(): void {
     const seconds = Math.max(0, Math.floor((Date.now() - this.loadingStartedAt) / 1000));
-    const remaining = Math.max(0, 120 - seconds);
-    this.loadingText = `${seconds}s elapsed, timeout in ${remaining}s`;
+    const stageLabel = this.loadingStage === "query" ? "Searching vault" : "Asking Codex";
+    this.loadingText = `${stageLabel} · ${seconds}s`;
     if (this.loadingTextEl) {
       this.loadingTextEl.setText(this.loadingText);
+    }
+    if (this.loadingStageEl) {
+      this.loadingStageEl.setText(this.loadingStage === "query" ? "Searching vault…" : "Asking Codex…");
     }
   }
 
@@ -699,14 +684,6 @@ export class BrainSidebarView extends ItemView {
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.openFile(file);
   }
-}
-
-function formatProviderStatus(status: Awaited<ReturnType<typeof getAIConfigurationStatus>>): string {
-  if (!status.configured) {
-    return status.message.replace(/\.$/, "");
-  }
-  const model = status.model ? ` (${status.model})` : "";
-  return `Codex${model}`;
 }
 
 function isStoppedRequest(error: unknown): boolean {

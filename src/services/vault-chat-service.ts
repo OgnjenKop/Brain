@@ -42,12 +42,14 @@ export class VaultChatService {
     message: string,
     history: ChatExchange[] = [],
     signal?: AbortSignal,
+    onStage?: (stage: "query" | "ai") => void,
   ): Promise<VaultChatResponse> {
     const trimmed = message.trim();
     if (!trimmed) {
       throw new Error("Enter a message first");
     }
 
+    onStage?.("query");
     const [instructions, sources] = await Promise.all([
       this.instructionService.readInstructions(),
       this.queryService.queryVault(trimmed),
@@ -60,6 +62,7 @@ export class VaultChatService {
       throw new Error(aiStatus.message);
     }
 
+    onStage?.("ai");
     const response = await this.aiService.completeChat(
       [
         {
