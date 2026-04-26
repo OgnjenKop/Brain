@@ -3,6 +3,7 @@ import { getAIConfigurationStatus } from "../utils/ai-config";
 import { BrainAIService } from "./ai-service";
 import { InstructionService } from "./instruction-service";
 import { VaultQueryMatch, VaultQueryService } from "./vault-query-service";
+import { VaultService } from "./vault-service";
 import { VaultWritePlan, VaultWriteService } from "./vault-write-service";
 
 export interface VaultChatResponse {
@@ -12,23 +13,36 @@ export interface VaultChatResponse {
   usedAI: boolean;
 }
 
+export interface ChatExchange {
+  role: "user" | "brain";
+  text: string;
+}
+
 const EMPTY_PLAN: VaultWritePlan = {
   summary: "",
   confidence: "low",
   operations: [],
   questions: [],
 };
+const CHAT_CONTEXT_LIMIT = 6;
+const MAX_HISTORY_EXCHANGES = 6;
+const MAX_CONTEXT_EXCERPT_CHARS = 1200;
 
 export class VaultChatService {
   constructor(
     private readonly aiService: BrainAIService,
     private readonly instructionService: InstructionService,
     private readonly queryService: VaultQueryService,
+    private readonly vaultService: VaultService,
     private readonly writeService: VaultWriteService,
     private readonly settingsProvider: () => BrainPluginSettings,
   ) {}
 
-  async respond(message: string, signal?: AbortSignal): Promise<VaultChatResponse> {
+  async respond(
+    message: string,
+    history: ChatExchange[] = [],
+    signal?: AbortSignal,
+  ): Promise<VaultChatResponse> {
     const trimmed = message.trim();
     if (!trimmed) {
       throw new Error("Enter a message first");
@@ -38,8 +52,9 @@ export class VaultChatService {
       this.instructionService.readInstructions(),
       this.queryService.queryVault(trimmed),
     ]);
-    const context = formatSourcesForPrompt(sources);
+    const context = formatSourcesForPrompt(sources.slice(0, CHAT_CONTEXT_LIMIT));
     const settings = this.settingsProvider();
+    const vaultBasePath = this.vaultService.getBasePath();
     const aiStatus = await getAIConfigurationStatus(settings);
     if (!aiStatus.configured) {
       throw new Error(aiStatus.message);
@@ -53,15 +68,11 @@ export class VaultChatService {
         },
         {
           role: "user",
-          content: [
-            `User message: ${trimmed}`,
-            "",
-            "Relevant vault context:",
-            context || "No matching vault files found.",
-          ].join("\n"),
+          content: buildUserPrompt(trimmed, vaultBasePath, context, history),
         },
       ],
       settings,
+      vaultBasePath,
       signal,
     );
     const parsed = parseChatResponse(response);
@@ -80,9 +91,12 @@ function buildSystemPrompt(
 ): string {
   return [
     "You are Brain, an Obsidian vault assistant.",
-    "You retrieve information from explicit markdown context and propose safe vault writes.",
-    "Never claim facts that are not in the provided vault context.",
-    "Never directly write files. Return only a JSON object.",
+    "Answer directly from the Obsidian vault markdown.",
+    "You may inspect markdown files in the current working directory with read-only shell commands.",
+    "Never claim facts that are not supported by vault markdown or the provided source hints.",
+    "For simple questions, answer in one or two sentences.",
+    "For filing requests, propose safe vault writes.",
+    "Return only a JSON object.",
     "",
     "Return this JSON shape:",
     "{",
@@ -107,6 +121,41 @@ function buildSystemPrompt(
   ].join("\n");
 }
 
+function buildUserPrompt(
+  message: string,
+  vaultBasePath: string | null,
+  context: string,
+  history: ChatExchange[],
+): string {
+  const parts: string[] = [];
+
+  const recentHistory = history.slice(-MAX_HISTORY_EXCHANGES);
+  if (recentHistory.length > 0) {
+    parts.push("Conversation history:");
+    for (const exchange of recentHistory) {
+      parts.push("");
+      parts.push(`${exchange.role === "user" ? "User" : "Brain"}:`);
+      parts.push(exchange.text);
+    }
+    parts.push("");
+    parts.push("---");
+    parts.push("");
+  }
+
+  parts.push(`User message: ${message}`);
+  parts.push("");
+  parts.push(
+    vaultBasePath
+      ? "You are running from the Obsidian vault root. Use read-only shell commands only if you need to inspect markdown files."
+      : "Use the relevant vault context below.",
+  );
+  parts.push("");
+  parts.push("Relevant source hints:");
+  parts.push(context || "No matching vault files found.");
+
+  return parts.join("\n");
+}
+
 function formatSourcesForPrompt(sources: VaultQueryMatch[]): string {
   return sources
     .map((source, index) => [
@@ -114,7 +163,7 @@ function formatSourcesForPrompt(sources: VaultQueryMatch[]): string {
       `Title: ${source.title}`,
       `Reason: ${source.reason}`,
       "",
-      source.text.slice(0, 3500),
+      source.excerpt.slice(0, MAX_CONTEXT_EXCERPT_CHARS),
     ].join("\n"))
     .join("\n\n");
 }

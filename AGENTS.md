@@ -15,13 +15,11 @@ The working principle is simple:
 
 Stay within the current product shape:
 
-- quick capture into `Brain/inbox.md`
-- quick task capture into `Brain/tasks.md`
-- daily journal entries into `Brain/journal/YYYY-MM-DD.md`
-- inbox triage and review history in `Brain/reviews/`
-- summaries in `Brain/summaries/`
-- generated notes and topic pages in `Brain/notes/`
-- question answering and topic-page generation over explicit scopes
+- vault chat sidebar for retrieval and filing
+- editable `Brain/AGENTS.md` operating instructions
+- safe markdown writes with per-operation approval
+- question answering over explicit vault context
+- generated notes and topic pages in the configured notes folder
 
 Do not add:
 

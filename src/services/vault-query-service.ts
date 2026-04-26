@@ -1,5 +1,5 @@
 import type { TFile } from "obsidian";
-import { BrainPluginSettings } from "../settings/settings";
+import { BrainPluginSettings, parseExcludeFolders } from "../settings/settings";
 import { VaultService } from "./vault-service";
 
 export interface VaultQueryMatch {
@@ -14,6 +14,32 @@ export interface VaultQueryMatch {
 const MAX_QUERY_FILES = 12;
 const MAX_EXCERPT_CHARS = 700;
 const MAX_SNIPPET_LINES = 5;
+const STOP_WORDS = new Set([
+  "about",
+  "are",
+  "can",
+  "did",
+  "does",
+  "for",
+  "from",
+  "have",
+  "how",
+  "into",
+  "is",
+  "know",
+  "list",
+  "my",
+  "the",
+  "this",
+  "that",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "with",
+]);
 
 export class VaultQueryService {
   constructor(
@@ -24,8 +50,9 @@ export class VaultQueryService {
   async queryVault(query: string, limit = MAX_QUERY_FILES): Promise<VaultQueryMatch[]> {
     const settings = this.settingsProvider();
     const tokens = tokenize(query);
+    const excludeFolders = parseExcludeFolders(settings.excludeFolders);
     const files = (await this.vaultService.listMarkdownFiles())
-      .filter((file) => shouldIncludeFile(file, settings))
+      .filter((file) => shouldIncludeFile(file, settings.instructionsFile, excludeFolders))
       .sort((left, right) => right.stat.mtime - left.stat.mtime);
 
     const matches: VaultQueryMatch[] = [];
@@ -51,8 +78,17 @@ export class VaultQueryService {
   }
 }
 
-function shouldIncludeFile(file: TFile, settings: BrainPluginSettings): boolean {
-  return file.path !== settings.instructionsFile;
+function shouldIncludeFile(file: TFile, instructionsFile: string, excludeFolders: string[]): boolean {
+  if (file.path === instructionsFile) {
+    return false;
+  }
+  for (const folder of excludeFolders) {
+    const prefix = folder.endsWith("/") ? folder : `${folder}/`;
+    if (file.path === folder || file.path.startsWith(prefix)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function tokenize(input: string): string[] {
@@ -62,6 +98,7 @@ export function tokenize(input: string): string[] {
     .split(/[^a-z0-9_/-]+/i)
     .map((token) => token.trim())
     .filter((token) => token.length >= 3)
+    .filter((token) => !STOP_WORDS.has(token))
     .filter((token) => {
       if (seen.has(token)) {
         return false;
@@ -119,7 +156,17 @@ function scoreFile(file: TFile, text: string, query: string, tokens: string[]): 
   if (matchedTokens.length === tokens.length) {
     score += Math.min(10, tokens.length * 2);
   }
-  score += Math.min(3, file.stat.mtime / Date.now());
+  const ageMs = Date.now() - file.stat.mtime;
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  if (ageDays < 1) {
+    score += 10;
+  } else if (ageDays < 7) {
+    score += 6;
+  } else if (ageDays < 30) {
+    score += 3;
+  } else if (ageDays < 90) {
+    score += 1;
+  }
   return score;
 }
 

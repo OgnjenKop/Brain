@@ -8,7 +8,7 @@ Brain is now focused on one product direction: an Obsidian-native vault chat tha
 - Editable `Brain/AGENTS.md` operating instructions
 - Command and sidebar button to open `Brain/AGENTS.md`
 - Deterministic vault query over markdown files with ranked source snippets
-- AI-backed answers over retrieved vault context
+- AI-backed answers over compact source hints, with Codex running from the vault root in a read-only sandbox
 - AI-backed safe write plans
 - Editable per-operation approval modal before writes
 - Safe write operations: append, create

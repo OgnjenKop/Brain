@@ -1,6 +1,6 @@
 import { App, ItemView, MarkdownRenderer, TFile, WorkspaceLeaf } from "obsidian";
 import BrainPlugin from "../../main";
-import { VaultChatResponse } from "../services/vault-chat-service";
+import { VaultChatResponse, ChatExchange } from "../services/vault-chat-service";
 import type { VaultQueryMatch } from "../services/vault-query-service";
 import { VaultPlanModal } from "./vault-plan-modal";
 import { showError } from "../utils/error-handler";
@@ -46,7 +46,9 @@ export class BrainSidebarView extends ItemView {
   private loadingStartedAt = 0;
   private loadingTimer: number | null = null;
   private loadingText = "";
+  private loadingTextEl: HTMLElement | null = null;
   private renderGeneration = 0;
+  private resizeFrameId: number | null = null;
   private turns: ChatTurn[] = [];
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: BrainPlugin) {
@@ -145,6 +147,10 @@ export class BrainSidebarView extends ItemView {
   onClose(): Promise<void> {
     this.currentAbortController?.abort();
     this.stopLoadingTimer();
+    if (this.resizeFrameId !== null) {
+      cancelAnimationFrame(this.resizeFrameId);
+      this.resizeFrameId = null;
+    }
     return Promise.resolve();
   }
 
@@ -192,7 +198,8 @@ export class BrainSidebarView extends ItemView {
     const controller = new AbortController();
     this.currentAbortController = controller;
     try {
-      const response = await this.plugin.chatWithVault(message, controller.signal);
+      const history = this.buildChatHistory();
+      const response = await this.plugin.chatWithVault(message, history, controller.signal);
       this.renderResponse(response);
     } catch (error) {
       if (isStoppedRequest(error)) {
@@ -204,6 +211,17 @@ export class BrainSidebarView extends ItemView {
       this.currentAbortController = null;
       this.setLoading(false);
     }
+  }
+
+  private buildChatHistory(): ChatExchange[] {
+    // Exclude the last turn, which is the current user message being sent.
+    return this.turns
+      .slice(0, -1)
+      .filter((turn): turn is ChatTurn & { text: string } => Boolean(turn.text))
+      .map((turn) => ({
+        role: turn.role,
+        text: turn.text,
+      }));
   }
 
   private stopCurrentRequest(): void {
@@ -328,6 +346,7 @@ export class BrainSidebarView extends ItemView {
     if (response.plan && response.plan.operations.length > 0) {
       new VaultPlanModal(this.app, {
         plan: response.plan,
+        settings: this.plugin.settings,
         onApprove: async (plan) => this.plugin.applyVaultWritePlan(plan),
         onComplete: async (message, paths) => {
           this.addUpdatedFileTurn(message, paths);
@@ -343,16 +362,17 @@ export class BrainSidebarView extends ItemView {
       this.loadingStartedAt = Date.now();
       this.updateLoadingText();
       this.startLoadingTimer();
+      this.appendLoadingIndicator();
     } else {
       this.stopLoadingTimer();
       this.loadingText = "";
+      this.removeLoadingIndicator();
     }
     this.inputEl.disabled = loading;
     this.clearButtonEl.disabled = loading;
     this.stopButtonEl.disabled = !loading;
-    this.updateComposerState();
+    this.sendButtonEl.disabled = loading || !this.inputEl.value.trim();
     this.renderModelSelector();
-    void this.renderMessages();
   }
 
   private updateComposerState(): void {
@@ -363,22 +383,93 @@ export class BrainSidebarView extends ItemView {
   }
 
   private autoResizeInput(): void {
-    this.inputEl.style.height = "auto";
-    this.inputEl.style.height = `${Math.min(this.inputEl.scrollHeight, 240)}px`;
+    if (this.resizeFrameId !== null) {
+      cancelAnimationFrame(this.resizeFrameId);
+    }
+    this.resizeFrameId = requestAnimationFrame(() => {
+      this.resizeFrameId = null;
+      this.inputEl.style.height = "auto";
+      this.inputEl.style.height = `${Math.min(this.inputEl.scrollHeight, 240)}px`;
+    });
   }
 
   private addTurn(role: "user" | "brain", text: string, sources?: VaultQueryMatch[]): void {
-    this.turns.push({ role, text, sources });
-    void this.renderMessages();
+    const turn: ChatTurn = { role, text, sources };
+    this.turns.push(turn);
+    void this.appendTurnElement(turn);
   }
 
   private addUpdatedFileTurn(message: string, paths: string[]): void {
-    this.turns.push({
+    const turn: ChatTurn = {
       role: "brain",
       text: message,
       updatedPaths: paths,
+    };
+    this.turns.push(turn);
+    void this.appendTurnElement(turn);
+  }
+
+  private async appendTurnElement(turn: ChatTurn): Promise<void> {
+    const generation = ++this.renderGeneration;
+
+    const emptyEl = this.messagesEl.querySelector(".brain-chat-empty");
+    if (emptyEl) {
+      emptyEl.remove();
+    }
+
+    this.removeLoadingIndicator();
+
+    const item = this.messagesEl.createEl("div", {
+      cls: `brain-chat-message brain-chat-message-${turn.role}`,
     });
-    void this.renderMessages();
+    item.createEl("div", {
+      cls: "brain-chat-role",
+      text: turn.role === "user" ? "You" : "Brain",
+    });
+    const output = item.createEl("div", { cls: "brain-output" });
+    if (turn.role === "brain") {
+      await MarkdownRenderer.render(this.app, turn.text, output, "", this);
+      if (generation !== this.renderGeneration) {
+        item.remove();
+        return;
+      }
+    } else {
+      output.setText(turn.text);
+    }
+    if (turn.role === "brain" && turn.sources?.length) {
+      this.renderSources(item, turn.sources);
+    }
+    if (turn.role === "brain" && turn.updatedPaths?.length) {
+      this.renderUpdatedFiles(item, turn.updatedPaths);
+    }
+
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+
+  private appendLoadingIndicator(): void {
+    if (this.messagesEl.querySelector(".brain-chat-message-loading")) {
+      return;
+    }
+    const item = this.messagesEl.createEl("div", {
+      cls: "brain-chat-message brain-chat-message-brain brain-chat-message-loading",
+    });
+    item.createEl("div", {
+      cls: "brain-chat-role",
+      text: "Brain",
+    });
+    this.loadingTextEl = item.createEl("div", {
+      cls: "brain-loading",
+      text: this.loadingText || "Reading vault context and asking Codex...",
+    });
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+
+  private removeLoadingIndicator(): void {
+    const loadingEl = this.messagesEl.querySelector(".brain-chat-message-loading");
+    if (loadingEl) {
+      loadingEl.remove();
+    }
+    this.loadingTextEl = null;
   }
 
   private async renderMessages(): Promise<void> {
@@ -386,6 +477,7 @@ export class BrainSidebarView extends ItemView {
     this.messagesEl.empty();
     if (!this.turns.length) {
       this.renderEmptyState();
+      return;
     }
     for (const turn of this.turns) {
       if (generation !== this.renderGeneration) {
@@ -415,17 +507,7 @@ export class BrainSidebarView extends ItemView {
       }
     }
     if (this.isLoading) {
-      const item = this.messagesEl.createEl("div", {
-        cls: "brain-chat-message brain-chat-message-brain brain-chat-message-loading",
-      });
-      item.createEl("div", {
-        cls: "brain-chat-role",
-        text: "Brain",
-      });
-      item.createEl("div", {
-        cls: "brain-loading",
-        text: this.loadingText || "Reading vault context and asking Codex...",
-      });
+      this.appendLoadingIndicator();
     }
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
@@ -434,7 +516,6 @@ export class BrainSidebarView extends ItemView {
     this.stopLoadingTimer();
     this.loadingTimer = window.setInterval(() => {
       this.updateLoadingText();
-      void this.renderMessages();
     }, 1000);
   }
 
@@ -449,6 +530,9 @@ export class BrainSidebarView extends ItemView {
     const seconds = Math.max(0, Math.floor((Date.now() - this.loadingStartedAt) / 1000));
     const remaining = Math.max(0, 120 - seconds);
     this.loadingText = `Reading vault context and asking Codex... ${seconds}s elapsed, timeout in ${remaining}s.`;
+    if (this.loadingTextEl) {
+      this.loadingTextEl.setText(this.loadingText);
+    }
   }
 
   private renderEmptyState(): void {

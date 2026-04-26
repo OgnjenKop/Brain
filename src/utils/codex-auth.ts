@@ -1,3 +1,5 @@
+import { getExecFileAsync, getNodeRequire, isEnoentError, isNodeRuntimeUnavailable, isTimeoutError } from "./node-runtime";
+
 export type CodexLoginStatus = "logged-in" | "logged-out" | "unavailable";
 
 const CODEX_LOGIN_STATUS_TIMEOUT_MS = 5000;
@@ -67,37 +69,6 @@ export async function getCodexBinaryPath(): Promise<string | null> {
   }
 
   return null;
-}
-
-function isEnoentError(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
-}
-
-function isTimeoutError(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "killed" in error && error.killed === true;
-}
-
-function isNodeRuntimeUnavailable(error: unknown): boolean {
-  return error instanceof ReferenceError || error instanceof TypeError;
-}
-
-function getExecFileAsync(): (
-  file: string,
-  args?: readonly string[],
-  options?: Record<string, unknown>,
-) => Promise<{ stdout: string; stderr: string }> {
-  const req = getNodeRequire();
-  const { execFile } = req("child_process") as typeof import("child_process");
-  const { promisify } = req("util") as typeof import("util");
-  return promisify(execFile) as (
-    file: string,
-    args?: readonly string[],
-    options?: Record<string, unknown>,
-  ) => Promise<{ stdout: string; stderr: string }>;
-}
-
-function getNodeRequire(): NodeRequire {
-  return Function("return require")() as NodeRequire;
 }
 
 function buildCodexCandidates(pathModule: typeof import("path"), homeDir: string): string[] {

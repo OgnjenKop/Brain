@@ -1,5 +1,6 @@
 import {
   App,
+  FileSystemAdapter,
   TFile,
   TFolder,
   normalizePath,
@@ -105,6 +106,12 @@ export class VaultService {
 
   async listMarkdownFiles(): Promise<TFile[]> {
     return this.app.vault.getMarkdownFiles();
+  }
+
+  getBasePath(): string | null {
+    return this.app.vault.adapter instanceof FileSystemAdapter
+      ? this.app.vault.adapter.getBasePath()
+      : null;
   }
 
   private async createFolderIfMissing(folderPath: string): Promise<void> {

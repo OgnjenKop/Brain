@@ -7,7 +7,7 @@ import { BrainSettingTab } from "./src/settings/settings-tab";
 import { BrainAIService } from "./src/services/ai-service";
 import { BrainAuthService } from "./src/services/auth-service";
 import { InstructionService } from "./src/services/instruction-service";
-import { VaultChatResponse, VaultChatService } from "./src/services/vault-chat-service";
+import { VaultChatResponse, VaultChatService, ChatExchange } from "./src/services/vault-chat-service";
 import { VaultQueryService } from "./src/services/vault-query-service";
 import { VaultService } from "./src/services/vault-service";
 import { VaultWritePlan, VaultWriteService } from "./src/services/vault-write-service";
@@ -48,6 +48,7 @@ export default class BrainPlugin extends Plugin {
       this.aiService,
       this.instructionService,
       this.vaultQueryService,
+      this.vaultService,
       this.vaultWriteService,
       () => this.settings,
     );
@@ -120,8 +121,8 @@ export default class BrainPlugin extends Plugin {
     await leaf.openFile(file);
   }
 
-  async chatWithVault(message: string, signal?: AbortSignal): Promise<VaultChatResponse> {
-    return this.vaultChatService.respond(message, signal);
+  async chatWithVault(message: string, history: ChatExchange[] = [], signal?: AbortSignal): Promise<VaultChatResponse> {
+    return this.vaultChatService.respond(message, history, signal);
   }
 
   async applyVaultWritePlan(plan: VaultWritePlan): Promise<string[]> {

@@ -25,6 +25,7 @@ async function run(): Promise<void> {
   assert.equal(normalized.notesFolder, "Knowledge");
   assert.equal(normalized.codexModel, "gpt-5");
   assert.equal(normalized.instructionsFile, DEFAULT_BRAIN_SETTINGS.instructionsFile);
+  assert.equal(normalized.excludeFolders, DEFAULT_BRAIN_SETTINGS.excludeFolders);
   assert.ok(!("openAIModel" in normalized));
   assert.ok(!("openAIApiKey" in normalized));
   assert.ok(!("openAIBaseUrl" in normalized));
@@ -37,6 +38,16 @@ async function run(): Promise<void> {
   assert.ok(!("summariesFolder" in normalized));
   assert.ok(!("reviewsFolder" in normalized));
   assert.ok(!("summaryLookbackDays" in normalized));
+
+  const withExcludes = normalizeBrainSettings({
+    excludeFolders: "  .obsidian/ \n node_modules \n\n",
+  });
+  assert.equal(withExcludes.excludeFolders, ".obsidian\nnode_modules");
+
+  const emptyExcludes = normalizeBrainSettings({
+    excludeFolders: "",
+  });
+  assert.equal(emptyExcludes.excludeFolders, "");
 
   assert.equal(parseCodexLoginStatus("Logged in using ChatGPT"), "logged-in");
   assert.equal(parseCodexLoginStatus("Signed in with ChatGPT"), "logged-in");
@@ -117,6 +128,14 @@ async function run(): Promise<void> {
       text: "Alpha archived note can be queried like any normal note.",
       mtime: TEST_MTIME_BASE + 14,
     },
+    ".obsidian/plugins/brain/data.md": {
+      text: "Alpha plugin data",
+      mtime: TEST_MTIME_BASE + 15,
+    },
+    "node_modules/some-package/readme.md": {
+      text: "Alpha package readme",
+      mtime: TEST_MTIME_BASE + 16,
+    },
   });
   const queryService = new VaultQueryService(queryVault as never, () => DEFAULT_BRAIN_SETTINGS);
   const queryMatches = await queryService.queryVault("Alpha pricing", 10);
@@ -125,6 +144,8 @@ async function run(): Promise<void> {
   assert.ok(queryMatches.some((match) => match.path === "Inbox.md"));
   assert.ok(queryMatches.some((match) => match.path === "Reference/old-note.md"));
   assert.ok(!queryMatches.some((match) => match.path === "Brain/AGENTS.md"));
+  assert.ok(!queryMatches.some((match) => match.path === ".obsidian/plugins/brain/data.md"));
+  assert.ok(!queryMatches.some((match) => match.path === "node_modules/some-package/readme.md"));
   assert.equal(queryMatches[0].path, "Notes/project-alpha.md");
   assert.match(queryMatches[0].reason, /exact phrase match|heading matches/);
   assert.match(queryMatches[0].excerpt, /Owner: Mira/);

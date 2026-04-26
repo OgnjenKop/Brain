@@ -86,11 +86,12 @@ Brain is AI-only and uses the local Codex CLI. A working Codex login is required
 With Codex configured:
 
 - Brain retrieves relevant markdown context from the vault
-- Brain answers from retrieved vault context
+- Brain starts Codex from the Obsidian vault root with a read-only sandbox, so Codex can inspect markdown files when source hints are not enough
+- Brain answers from vault markdown evidence
 - Brain can propose filing plans for rough input
 - Codex uses the official local Codex CLI and its `Sign in with ChatGPT` flow
 
-AI requests include only the instruction file, the user message, and selected markdown context from the vault.
+AI requests include the instruction file, the user message, and compact source hints from the vault. Codex is run with the vault as its working directory, but the plugin only applies markdown writes after you approve a structured preview.
 
 ## Settings
 
@@ -98,6 +99,7 @@ Storage:
 
 - notes folder
 - instructions file
+- excluded folders (one per line)
 
 Codex:
 

@@ -72,6 +72,18 @@ export class BrainSettingTab extends PluginSettingTab {
         ),
       );
 
+    new Setting(containerEl)
+      .setName("Excluded folders")
+      .setDesc("One folder path per line. Brain will skip markdown files inside these folders when searching the vault.")
+      .addTextArea((text) => {
+        text.setValue(this.plugin.settings.excludeFolders).onChange((value) => {
+          this.plugin.settings.excludeFolders = value;
+        });
+        text.inputEl.addEventListener("blur", () => {
+          void this.plugin.saveSettings();
+        });
+      });
+
     containerEl.createEl("h3", { text: "Codex CLI" });
 
     this.createCodexStatusSetting(containerEl);
@@ -217,54 +229,26 @@ export class BrainSettingTab extends PluginSettingTab {
     onValueChange: (value: string) => void,
     validate?: (value: string) => boolean,
   ): TextComponent {
-    let currentValue = value;
-    let lastSavedValue = value;
-    let isSaving = false;
+    let lastValidValue = value;
 
     text.setValue(value).onChange((nextValue) => {
-      currentValue = nextValue;
       if (!validate || validate(nextValue)) {
         onValueChange(nextValue);
+        lastValidValue = nextValue;
       }
     });
-    this.queueSaveOnBlur(
-      text.inputEl,
-      () => currentValue,
-      () => lastSavedValue,
-      (savedValue) => {
-        currentValue = savedValue;
-        lastSavedValue = savedValue;
-      },
-      () => isSaving,
-      (saving) => {
-        isSaving = saving;
-      },
-      validate,
-    );
-    return text;
-  }
 
-  private queueSaveOnBlur(
-    input: HTMLInputElement,
-    getCurrentValue: () => string,
-    getLastSavedValue: () => string,
-    setLastSavedValue: (value: string) => void,
-    isSaving: () => boolean,
-    setSaving: (saving: boolean) => void,
-    validate?: (value: string) => boolean,
-  ): void {
-    input.addEventListener("blur", () => {
-      void this.saveOnBlur(
-        input,
-        getCurrentValue,
-        getLastSavedValue,
-        setLastSavedValue,
-        isSaving,
-        setSaving,
-        validate,
-      );
+    text.inputEl.addEventListener("blur", () => {
+      const currentValue = text.inputEl.value;
+      if (validate && !validate(currentValue)) {
+        text.setValue(lastValidValue);
+        onValueChange(lastValidValue);
+        return;
+      }
+      void this.plugin.saveSettings();
     });
-    input.addEventListener("keydown", (event) => {
+
+    text.inputEl.addEventListener("keydown", (event) => {
       if (
         event.key === "Enter" &&
         !event.metaKey &&
@@ -273,43 +257,10 @@ export class BrainSettingTab extends PluginSettingTab {
         !event.shiftKey
       ) {
         event.preventDefault();
-        input.blur();
+        text.inputEl.blur();
       }
     });
-  }
 
-  private async saveOnBlur(
-    input: HTMLInputElement,
-    getCurrentValue: () => string,
-    getLastSavedValue: () => string,
-    setLastSavedValue: (value: string) => void,
-    isSaving: () => boolean,
-    setSaving: (saving: boolean) => void,
-    validate?: (value: string) => boolean,
-  ): Promise<void> {
-    if (isSaving()) {
-      return;
-    }
-
-    const currentValue = getCurrentValue();
-    if (currentValue === getLastSavedValue()) {
-      return;
-    }
-
-    if (validate && !validate(currentValue)) {
-      const lastSavedValue = getLastSavedValue();
-      input.value = lastSavedValue;
-      setLastSavedValue(lastSavedValue);
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await this.plugin.saveSettings();
-      const savedValue = input.value;
-      setLastSavedValue(savedValue);
-    } finally {
-      setSaving(false);
-    }
+    return text;
   }
 }

@@ -1,4 +1,5 @@
 import { BrainPluginSettings } from "../settings/settings";
+import { isSafeMarkdownPath } from "../utils/path-safety";
 import { VaultService } from "./vault-service";
 
 export type VaultWriteOperation =
@@ -47,9 +48,12 @@ export class VaultWriteService {
   }
 
   async applyPlan(plan: VaultWritePlan): Promise<string[]> {
-    const normalized = this.normalizePlan(plan);
+    const settings = this.settingsProvider();
     const paths: string[] = [];
-    for (const operation of normalized.operations) {
+    for (const operation of plan.operations) {
+      if (!isSafeMarkdownPath(operation.path, settings)) {
+        continue;
+      }
       if (operation.type === "append") {
         await this.vaultService.appendText(operation.path, operation.content);
         paths.push(operation.path);
@@ -80,7 +84,8 @@ export class VaultWriteService {
     const path = "path" in candidate
       ? normalizeMarkdownPath(String(candidate.path ?? ""))
       : "";
-    if (!this.isSafeMarkdownPath(path)) {
+    const settings = this.settingsProvider();
+    if (!isSafeMarkdownPath(path, settings)) {
       return null;
     }
 
@@ -90,18 +95,6 @@ export class VaultWriteService {
       content,
       description: readDescription(candidate),
     };
-  }
-
-  private isSafeMarkdownPath(path: string): boolean {
-    const settings = this.settingsProvider();
-    const segments = path.split("/").filter(Boolean);
-    return (
-      Boolean(path) &&
-      path.endsWith(".md") &&
-      path !== settings.instructionsFile &&
-      !path.includes("..") &&
-      segments.every((segment) => !segment.startsWith("."))
-    );
   }
 }
 

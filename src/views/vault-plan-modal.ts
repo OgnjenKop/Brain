@@ -1,9 +1,12 @@
 import { App, Modal, Notice } from "obsidian";
+import type { BrainPluginSettings } from "../settings/settings";
 import type { VaultWriteOperation, VaultWritePlan } from "../services/vault-write-service";
+import { isSafeMarkdownPath } from "../utils/path-safety";
 import { showError } from "../utils/error-handler";
 
 interface VaultPlanModalOptions {
   plan: VaultWritePlan;
+  settings: BrainPluginSettings;
   onApprove: (plan: VaultWritePlan) => Promise<string[]>;
   onComplete: (message: string, paths: string[]) => Promise<void> | void;
 }
@@ -82,7 +85,7 @@ export class VaultPlanModal extends Modal {
       new Notice("Select at least one change to apply");
       return;
     }
-    const invalidPath = operations.find((operation) => !isSafeMarkdownPath(operation.path));
+    const invalidPath = operations.find((operation) => !isSafeMarkdownPath(operation.path, this.options.settings));
     if (invalidPath) {
       new Notice(`Invalid target path: ${invalidPath.path}`);
       return;
@@ -163,14 +166,4 @@ function describeOperation(operation: VaultWritePlan["operations"][number]): str
     return `Append to ${operation.path}`;
   }
   return `Create ${operation.path}`;
-}
-
-function isSafeMarkdownPath(path: string): boolean {
-  const segments = path.split("/").filter(Boolean);
-  return (
-    Boolean(path) &&
-    path.endsWith(".md") &&
-    !path.includes("..") &&
-    segments.every((segment) => !segment.startsWith("."))
-  );
 }

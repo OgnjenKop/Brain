@@ -1,4 +1,5 @@
 import { getCodexBinaryPath } from "./codex-auth";
+import { getExecFileAsync } from "./node-runtime";
 
 export interface CodexModelOption {
   value: string;
@@ -19,7 +20,7 @@ export async function getSupportedCodexModelOptions(): Promise<CodexModelOption[
   }
 
   try {
-    const { execFileAsync } = getCodexModelRuntime();
+    const execFileAsync = getExecFileAsync();
     const { stdout, stderr } = await execFileAsync(codexBinary, ["debug", "models"], {
       maxBuffer: 1024 * 1024 * 20,
       timeout: CODEX_MODEL_CATALOG_TIMEOUT_MS,
@@ -96,23 +97,4 @@ function extractJsonObject(output: string): string | null {
     return null;
   }
   return output.slice(start, end + 1);
-}
-
-function getCodexModelRuntime(): {
-  execFileAsync: (
-    file: string,
-    args?: readonly string[],
-    options?: Record<string, unknown>,
-  ) => Promise<{ stdout: string; stderr: string }>;
-} {
-  const req = Function("return require")() as NodeRequire;
-  const { execFile } = req("child_process") as typeof import("child_process");
-  const { promisify } = req("util") as typeof import("util");
-  return {
-    execFileAsync: promisify(execFile) as (
-      file: string,
-      args?: readonly string[],
-      options?: Record<string, unknown>,
-    ) => Promise<{ stdout: string; stderr: string }>,
-  };
 }
