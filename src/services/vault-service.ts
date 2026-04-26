@@ -5,20 +5,14 @@ import {
   normalizePath,
 } from "obsidian";
 import { BrainPluginSettings } from "../settings/settings";
-import { formatDateKey } from "../utils/date";
-import { isUnderFolder } from "../utils/path";
 
 export class VaultService {
   constructor(private readonly app: App) {}
 
   async ensureKnownFolders(settings: BrainPluginSettings): Promise<void> {
     const folders = new Set([
-      settings.journalFolder,
       settings.notesFolder,
-      settings.summariesFolder,
-      settings.reviewsFolder,
-      parentFolder(settings.inboxFile),
-      parentFolder(settings.tasksFile),
+      parentFolder(settings.instructionsFile),
     ]);
 
     for (const folder of folders) {
@@ -67,27 +61,6 @@ export class VaultService {
     return this.app.vault.read(file);
   }
 
-  async readTextWithMtime(filePath: string): Promise<{
-    text: string;
-    mtime: number;
-    exists: boolean;
-  }> {
-    const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
-    if (!(file instanceof TFile)) {
-      return {
-        text: "",
-        mtime: 0,
-        exists: false,
-      };
-    }
-
-    return {
-      text: await this.app.vault.read(file),
-      mtime: file.stat.mtime,
-      exists: true,
-    };
-  }
-
   async appendText(filePath: string, content: string): Promise<TFile> {
     const file = await this.ensureFile(filePath);
     const current = await this.app.vault.read(file);
@@ -130,51 +103,8 @@ export class VaultService {
     }
   }
 
-  async appendJournalHeader(filePath: string, dateKey: string): Promise<TFile> {
-    const file = await this.ensureFile(filePath, `# ${dateKey}\n\n`);
-    const text = await this.app.vault.read(file);
-    if (!text.trim()) {
-      await this.app.vault.modify(file, `# ${dateKey}\n\n`);
-    }
-    return file;
-  }
-
   async listMarkdownFiles(): Promise<TFile[]> {
     return this.app.vault.getMarkdownFiles();
-  }
-
-  async collectMarkdownFiles(options: {
-    excludeFolders?: string[];
-    excludePaths?: string[];
-    minMtime?: number;
-    folderPath?: string;
-  } = {}): Promise<TFile[]> {
-    let files = await this.listMarkdownFiles();
-
-    if (options.excludeFolders) {
-      for (const folder of options.excludeFolders) {
-        files = files.filter((file) => !isUnderFolder(file.path, folder));
-      }
-    }
-
-    if (options.excludePaths) {
-      const excluded = new Set(options.excludePaths);
-      files = files.filter((file) => !excluded.has(file.path));
-    }
-
-    if (options.minMtime !== undefined) {
-      files = files.filter((file) => file.stat.mtime >= options.minMtime!);
-    }
-
-    if (options.folderPath !== undefined) {
-      files = files.filter((file) =>
-        options.folderPath
-          ? isUnderFolder(file.path, options.folderPath)
-          : !file.path.includes("/"),
-      );
-    }
-
-    return files.sort((left, right) => right.stat.mtime - left.stat.mtime);
   }
 
   private async createFolderIfMissing(folderPath: string): Promise<void> {

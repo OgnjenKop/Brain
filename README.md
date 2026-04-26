@@ -1,152 +1,125 @@
 # Brain
 
-Brain is a markdown-first synthesis layer for Obsidian.
+Brain is a markdown-first vault chat for Obsidian.
 
-It keeps markdown as the source of truth and helps you turn explicit vault context into durable markdown artifacts.
+It lets you ask what is already in your vault and tell Brain what to file. Brain searches explicit markdown context, answers with sources, and previews safe markdown writes before anything changes.
 
 ## What Brain Is
 
 Brain is built around a simple idea:
 
-`your vault should be something you can think with, not just something you store text in`
+`chat with the vault, keep markdown in control`
 
 That means:
 
 - markdown files stay canonical
-- the plugin stays local-first and simple
-- LLM features are layered on top of explicit vault context
-- output comes back as markdown you keep in your vault
-
-The core promise is simple:
-
-`select context → synthesize it → keep the result`
+- vault lookup is explicit and source-backed
+- AI can propose edits, but the plugin applies only approved safe operations
+- no hidden index, vector database, backend, or autonomous background agent
+- vault behavior is guided by an editable markdown instruction file
 
 ## Core Workflow
 
-- quick note capture into `Brain/inbox.md`
-- quick task capture into `Brain/tasks.md`
-- daily journal entries into `Brain/journal/YYYY-MM-DD.md`
-- inbox triage with promotion to task, journal, or note
-- review history with reopen support
-- daily and weekly markdown summaries with a local fallback summarizer
-- synthesis over the current note, selection, folder, recent files, or a chosen note group
-- ask Brain a freeform question about the current note, a selected group, a folder, or the entire vault
-- create durable topic pages from an explicit topic and vault context
-- vault-wide questions exclude Brain-generated summaries and review logs to avoid recursion
-- choose between summarize, task extraction, decision extraction, open-question extraction, clean-note rewriting, and project-brief drafting
-- OpenAI API, OpenAI Codex via ChatGPT, and Gemini synthesis and sidebar auto-routing when configured
-- helper buttons to open the provider API-key pages, with keys stored locally in plugin settings
-- command palette actions plus a persistent sidebar
+Use the Brain sidebar as a chat surface:
 
-Topic pages are the flagship artifact. They turn chosen context into reusable markdown you can revisit, expand, and link across the vault.
+```text
+You: What do I know about Alpha pricing?
+Brain: Searches vault markdown, answers with evidence and sources.
+
+You: Add that Mark owns the follow-up by Friday.
+Brain: Proposes safe markdown updates, then writes only after approval.
+```
+
+Brain supports two first-class flows in the same chat:
+
+- retrieval: ask questions about existing vault information
+- input: file rough information into the right markdown location
 
 ## Vault Layout
 
-By default, Brain writes to:
+By default, Brain uses:
 
 ```text
 Brain/
-  inbox.md
-  tasks.md
-  journal/
-    YYYY-MM-DD.md
-  notes/
-  reviews/
-  summaries/
+  AGENTS.md
+
+Notes/
 ```
 
-All paths are configurable in settings.
+`Brain/AGENTS.md` is created automatically. Edit it to tell Brain how to operate in your vault: preferred folders, linking style, filing rules, and safety rules.
+
+`Notes/` is the default folder Brain suggests for new notes. You can change it in settings.
+
+Brain does not create dedicated inbox, task, journal, summary, or review files.
 
 ## Commands
 
-- `Brain: Capture Note`
-- `Brain: Capture Task`
-- `Brain: Capture Journal Entry`
-- `Brain: Review Inbox`
-- `Brain: Open Review History`
-- `Brain: Create Today Summary`
-- `Brain: Create Weekly Summary`
-- `Brain: Capture Task From Selection`
-- `Brain: Open Today's Journal`
-- `Brain: Synthesize Notes`
-- `Brain: Synthesize Current Note`
-- `Brain: Ask Question`
-- `Brain: Ask Question About Current Note`
-- `Brain: Create Topic Page`
-- `Brain: Create Topic Page From Current Note`
-- `Brain: Open Brain Sidebar`
+- `Brain: Open Vault Chat`
+- `Brain: Open Instructions`
 
 ## Sidebar
 
-The sidebar is the main day-to-day surface.
+The sidebar is the main interface.
 
 It includes:
 
-- quick capture into inbox, tasks, or journal
-- topic-page creation as the signature artifact flow
-- synthesis actions: summarize current note, synthesize current note with template picker, extract tasks from selection, draft brief from folder, clean note from recent files, or synthesize selected notes
-- a scoped question flow for the current note, a folder, or the entire vault
-- topic page creation from the current note, a folder, or the entire vault
-- fast default outputs for common jobs plus a choose-template path for current note and picked notes
-- template picker for summarize, extract tasks, extract decisions, extract open questions, rewrite as clean note, and draft project brief
-- scope picker for synthesis, questions, and topic pages
-- review actions for inbox processing and review history
-- optional capture auto-routing when AI routing is enabled
-- status for inbox, tasks, AI, review history, and last artifact
-- output panels for the latest result and last artifact
-- collapsible sections to reduce UI density (state persists across reloads)
-- keyboard shortcuts for quick capture: n (note), t (task), j (journal), c (clear)
-- accessibility support with ARIA labels on interactive elements
+- chat input for retrieval and filing requests
+- source-backed answers from vault markdown
+- source snippets ranked by phrase, heading, path, tag, wiki-link, and content matches
+- editable preview modal for proposed writes
+- per-operation approve/skip controls before writing
+- quick access to `Brain/AGENTS.md`
+- Codex model selector
+- Codex status and settings access
 
-## Inbox Review
+Proposed writes are limited to safe operations:
 
-Inbox review is designed to turn raw capture into cleaner markdown.
+- append to an existing markdown file
+- create a new markdown file
 
-Available actions:
-
-- keep in inbox
-- convert to task
-- append to journal
-- promote to note
-- skip
-
-`Keep in inbox` leaves the entry unreviewed so you can come back to it later. The other actions record review history and mark the item reviewed.
-
-Keyboard shortcuts:
-
-- `k` keep in inbox
-- `t` convert to task
-- `j` append to journal
-- `n` promote to note
-- `s` skip
-
-Review actions are written to markdown logs in `Brain/reviews/`, and reviewed items can be re-opened from review history.
+Brain does not delete or overwrite existing user content. Write plans that target `Brain/AGENTS.md`, hidden dot-folders such as `.obsidian/`, parent-directory traversal, or non-markdown files are rejected.
 
 ## AI
 
-Without AI:
+Brain is AI-only and uses the local Codex CLI. A working Codex login is required before chat requests can run.
 
-- capture works normally
-- inbox review works normally
-- summaries use the built-in fallback summarizer
-- question answering uses a local evidence-based fallback
-- synthesis templates and topic pages still return structured markdown
+With Codex configured:
 
-With AI enabled:
+- Brain retrieves relevant markdown context from the vault
+- Brain answers from retrieved vault context
+- Brain can propose filing plans for rough input
+- Codex uses the official local Codex CLI and its `Sign in with ChatGPT` flow
 
-- synthesis, questions, summaries, and topic pages can use OpenAI API, OpenAI Codex via ChatGPT, or Google Gemini
-- sidebar auto-route can classify capture text as `note`, `task`, or `journal`
-- quick links to the OpenAI and Gemini API-key pages, plus manual key entry in settings
-- Codex support uses the official local Codex CLI and its `Sign in with ChatGPT` flow
-- support for custom OpenAI-compatible endpoints (Ollama, LM Studio, etc.)
-- OpenAI uses API keys from the OpenAI platform; custom OpenAI-compatible endpoints can use their own bearer tokens
+AI requests include only the instruction file, the user message, and selected markdown context from the vault.
 
-Brain is designed around query and synthesis over explicit vault context, not generic chat or autonomous behavior.
-It turns chosen context into durable markdown in `Brain/notes/`.
+## Settings
 
-## Roadmap
+Storage:
 
-The v0.4 release track is documented in `V4_ROADMAP.md`. Milestones 1 (extraction quality), 3 (large-vault responsiveness), and 4 (UX consistency) are shipped. Milestone 2 (behavior-level regression coverage) is next.
+- notes folder
+- instructions file
+
+Codex:
+
+- Codex setup via the local `codex login` flow with status recheck
+- optional Codex model selector in settings and the chat sidebar, populated from `codex debug models`
+
+## Safety Model
+
+Brain is intentionally not a freeform file-editing agent.
+
+The safe write path is:
+
+```text
+chat message
+-> vault query
+-> AI proposes structured operations
+-> preview modal
+-> user approves
+-> plugin writes markdown
+```
+
+The AI never receives permission to directly edit the vault.
 
 ## Installation
 
@@ -177,43 +150,6 @@ Place this repository directly in `.obsidian/plugins/brain` and use:
 npm run dev
 ```
 
-## Settings
-
-Storage:
-
-- inbox file path
-- tasks file path
-- journal folder
-- notes folder
-- summaries folder
-- reviews folder
-
-AI:
-
-- enable AI synthesis
-- enable AI routing
-- AI Provider (OpenAI API, OpenAI Codex via ChatGPT, or Google Gemini)
-- open provider API-key pages and paste keys manually
-- Codex setup via the local `codex login` flow
-- API key storage for OpenAI and Gemini
-- OpenAI base URL (for custom proxies or local LLMs)
-- Model selection (dropdown with common models plus custom entry)
-
-Context collection:
-
-- lookback window
-- maximum input characters
-
-Summary output:
-
-- persist summaries
-
-UI:
-
-- collapsed sidebar sections (persists your section collapse preferences)
-
-Default models: `gpt-4o-mini` (OpenAI), `gemini-1.5-flash` (Gemini)
-
 ## Development
 
 ```bash
@@ -222,13 +158,27 @@ npm test
 npm run build
 ```
 
-`npm test` runs a smoke-test suite covering settings normalization, date formatting, inbox/review-log parsing, synthesis template formatting and normalization, context formatting, and behavior-level count/cache paths.
+`npm test` runs smoke tests for settings normalization, Codex status parsing, vault query filtering, and safe write-plan normalization.
+
+To verify the built plugin bundle is installed into an Obsidian vault:
+
+```bash
+npm run build
+cp main.js manifest.json styles.css /path/to/vault/.obsidian/plugins/brain/
+OBSIDIAN_VAULT=/path/to/vault npm run smoke:installed
+```
+
+If `OBSIDIAN_VAULT` is not set, the installed-bundle smoke test checks `/Users/ognjen.koprivica/Documents/Obsidian_Vault`. This verifies the installed plugin files and bundled command IDs; it does not launch Obsidian.
+
+## Roadmap
+
+See `V4_ROADMAP.md` for the current product roadmap.
 
 ## Privacy
 
-- all user content stays in the vault as markdown files
-- OpenAI/Gemini requests are only made when AI settings are enabled and configured
-- requests use official provider endpoints unless overridden by a custom base URL
+- all persisted user content stays in the vault as markdown files
+- Codex requests are only made when you chat with Brain
+- Codex authentication is handled by the local Codex CLI
 - the plugin does not use embeddings, a vector database, or a backend service
 
 ## License

@@ -1,5 +1,7 @@
 export type CodexLoginStatus = "logged-in" | "logged-out" | "unavailable";
 
+const CODEX_LOGIN_STATUS_TIMEOUT_MS = 5000;
+
 export function parseCodexLoginStatus(output: string): CodexLoginStatus {
   const normalized = output.trim().toLowerCase();
   if (!normalized) {
@@ -10,7 +12,11 @@ export function parseCodexLoginStatus(output: string): CodexLoginStatus {
     return "logged-out";
   }
 
-  if (normalized.includes("logged in")) {
+  if (
+    normalized.includes("logged in") ||
+    normalized.includes("signed in") ||
+    normalized.includes("authenticated")
+  ) {
     return "logged-in";
   }
 
@@ -18,19 +24,20 @@ export function parseCodexLoginStatus(output: string): CodexLoginStatus {
 }
 
 export async function getCodexLoginStatus(): Promise<CodexLoginStatus> {
-  const codexBinary = await getCodexBinaryPath();
-  if (!codexBinary) {
-    return "unavailable";
-  }
-
   try {
+    const codexBinary = await getCodexBinaryPath();
+    if (!codexBinary) {
+      return "unavailable";
+    }
+
     const execFileAsync = getExecFileAsync();
     const { stdout, stderr } = await execFileAsync(codexBinary, ["login", "status"], {
       maxBuffer: 1024 * 1024,
+      timeout: CODEX_LOGIN_STATUS_TIMEOUT_MS,
     });
     return parseCodexLoginStatus(`${stdout}\n${stderr}`);
   } catch (error) {
-    if (isEnoentError(error)) {
+    if (isEnoentError(error) || isTimeoutError(error) || isNodeRuntimeUnavailable(error)) {
       return "unavailable";
     }
     return "logged-out";
@@ -38,7 +45,13 @@ export async function getCodexLoginStatus(): Promise<CodexLoginStatus> {
 }
 
 export async function getCodexBinaryPath(): Promise<string | null> {
-  const req = getNodeRequire();
+  let req: NodeRequire;
+  try {
+    req = getNodeRequire();
+  } catch {
+    return null;
+  }
+
   const fs = req("fs") as typeof import("fs");
   const path = req("path") as typeof import("path");
   const os = req("os") as typeof import("os");
@@ -58,6 +71,14 @@ export async function getCodexBinaryPath(): Promise<string | null> {
 
 function isEnoentError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function isTimeoutError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "killed" in error && error.killed === true;
+}
+
+function isNodeRuntimeUnavailable(error: unknown): boolean {
+  return error instanceof ReferenceError || error instanceof TypeError;
 }
 
 function getExecFileAsync(): (
