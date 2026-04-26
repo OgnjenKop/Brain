@@ -1,4 +1,4 @@
-import { App, ItemView, MarkdownRenderer, TFile, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import BrainPlugin from "../../main";
 import { VaultChatResponse, ChatExchange } from "../services/vault-chat-service";
 import type { VaultQueryMatch } from "../services/vault-query-service";
@@ -50,6 +50,8 @@ export class BrainSidebarView extends ItemView {
   private renderGeneration = 0;
   private resizeFrameId: number | null = null;
   private turns: ChatTurn[] = [];
+  private userScrolledUp = false;
+  private scrollToBottomEl: HTMLElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: BrainPlugin) {
     super(leaf);
@@ -81,8 +83,32 @@ export class BrainSidebarView extends ItemView {
     this.renderModelSelector();
     void this.refreshModelOptions();
 
-    this.messagesEl = this.contentEl.createEl("div", { cls: "brain-chat-messages" });
-    this.renderEmptyState();
+    const messagesContainer = this.contentEl.createEl("div", { cls: "brain-messages-container" });
+    this.messagesEl = messagesContainer.createEl("div", {
+      cls: "brain-chat-messages",
+      attr: { "aria-live": "polite", "aria-atomic": "false" },
+    });
+    this.messagesEl.addEventListener("scroll", () => {
+      this.userScrolledUp = !this.isNearBottom();
+      this.updateScrollToBottomButton();
+    });
+    if (this.turns.length > 0) {
+      void this.renderMessages();
+    } else {
+      this.renderEmptyState();
+    }
+
+    this.scrollToBottomEl = messagesContainer.createEl("button", {
+      cls: "brain-scroll-to-bottom",
+      attr: { "aria-label": "Scroll to bottom" },
+    });
+    setIcon(this.scrollToBottomEl, "arrow-down");
+    this.scrollToBottomEl.addEventListener("click", () => {
+      this.userScrolledUp = false;
+      this.messagesEl.scrollTo({ top: this.messagesEl.scrollHeight, behavior: "smooth" });
+      this.updateScrollToBottomButton();
+    });
+    this.updateScrollToBottomButton();
 
     const composer = this.contentEl.createEl("div", { cls: "brain-composer" });
     this.inputEl = this.contentEl.createEl("textarea", {
@@ -171,6 +197,10 @@ export class BrainSidebarView extends ItemView {
       console.error(error);
     }
 
+    const indicator = this.statusEl.createEl("span", {
+      cls: `brain-status-indicator ${aiConfigured ? "brain-status-indicator--ok" : "brain-status-indicator--warn"}`,
+    });
+    indicator.setAttribute("aria-hidden", "true");
     this.statusEl.createEl("span", { text: `AI: ${statusText} ` });
     this.statusEl.createEl("button", {
       cls: "brain-button brain-button-small",
@@ -193,6 +223,7 @@ export class BrainSidebarView extends ItemView {
 
     this.inputEl.value = "";
     this.updateComposerState();
+    this.userScrolledUp = false;
     this.addTurn("user", message);
     this.setLoading(true);
     const controller = new AbortController();
@@ -203,7 +234,9 @@ export class BrainSidebarView extends ItemView {
       this.renderResponse(response);
     } catch (error) {
       if (isStoppedRequest(error)) {
-        this.addTurn("brain", "Codex request stopped.");
+        if (this.contentEl.isConnected) {
+          this.addTurn("brain", "Codex request stopped.");
+        }
       } else {
         showError(error, "Could not chat with the vault");
       }
@@ -422,17 +455,23 @@ export class BrainSidebarView extends ItemView {
     const item = this.messagesEl.createEl("div", {
       cls: `brain-chat-message brain-chat-message-${turn.role}`,
     });
-    item.createEl("div", {
-      cls: "brain-chat-role",
-      text: turn.role === "user" ? "You" : "Brain",
-    });
+    const roleEl = item.createEl("div", { cls: "brain-chat-role" });
+    const roleIcon = roleEl.createEl("span");
+    setIcon(roleIcon, turn.role === "user" ? "user" : "brain-circuit");
+    roleEl.createEl("span", { text: turn.role === "user" ? "You" : "Brain" });
+
     const output = item.createEl("div", { cls: "brain-output" });
     if (turn.role === "brain") {
-      await MarkdownRenderer.render(this.app, turn.text, output, "", this);
+      try {
+        await MarkdownRenderer.render(this.app, turn.text, output, "", this);
+      } catch {
+        output.setText(turn.text);
+      }
       if (generation !== this.renderGeneration) {
         item.remove();
         return;
       }
+      this.addCopyButtons(output);
     } else {
       output.setText(turn.text);
     }
@@ -443,7 +482,7 @@ export class BrainSidebarView extends ItemView {
       this.renderUpdatedFiles(item, turn.updatedPaths);
     }
 
-    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    this.maybeScrollToBottom();
   }
 
   private appendLoadingIndicator(): void {
@@ -453,15 +492,20 @@ export class BrainSidebarView extends ItemView {
     const item = this.messagesEl.createEl("div", {
       cls: "brain-chat-message brain-chat-message-brain brain-chat-message-loading",
     });
-    item.createEl("div", {
-      cls: "brain-chat-role",
-      text: "Brain",
-    });
-    this.loadingTextEl = item.createEl("div", {
-      cls: "brain-loading",
+    const roleEl = item.createEl("div", { cls: "brain-chat-role" });
+    const roleIcon = roleEl.createEl("span");
+    setIcon(roleIcon, "brain-circuit");
+    roleEl.createEl("span", { text: "Brain" });
+
+    const loading = item.createEl("div", { cls: "brain-loading" });
+    const dots = loading.createEl("div", { cls: "brain-loading-dots" });
+    dots.createEl("span");
+    dots.createEl("span");
+    dots.createEl("span");
+    this.loadingTextEl = loading.createEl("span", {
       text: this.loadingText || "Reading vault context and asking Codex...",
     });
-    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    this.maybeScrollToBottom();
   }
 
   private removeLoadingIndicator(): void {
@@ -486,16 +530,22 @@ export class BrainSidebarView extends ItemView {
       const item = this.messagesEl.createEl("div", {
         cls: `brain-chat-message brain-chat-message-${turn.role}`,
       });
-      item.createEl("div", {
-        cls: "brain-chat-role",
-        text: turn.role === "user" ? "You" : "Brain",
-      });
+      const roleEl = item.createEl("div", { cls: "brain-chat-role" });
+      const roleIcon = roleEl.createEl("span");
+      setIcon(roleIcon, turn.role === "user" ? "user" : "brain-circuit");
+      roleEl.createEl("span", { text: turn.role === "user" ? "You" : "Brain" });
+
       const output = item.createEl("div", { cls: "brain-output" });
       if (turn.role === "brain") {
-        await MarkdownRenderer.render(this.app, turn.text, output, "", this);
+        try {
+          await MarkdownRenderer.render(this.app, turn.text, output, "", this);
+        } catch {
+          output.setText(turn.text);
+        }
         if (generation !== this.renderGeneration) {
           return;
         }
+        this.addCopyButtons(output);
       } else {
         output.setText(turn.text);
       }
@@ -509,7 +559,7 @@ export class BrainSidebarView extends ItemView {
     if (this.isLoading) {
       this.appendLoadingIndicator();
     }
-    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    this.maybeScrollToBottom();
   }
 
   private startLoadingTimer(): void {
@@ -529,7 +579,7 @@ export class BrainSidebarView extends ItemView {
   private updateLoadingText(): void {
     const seconds = Math.max(0, Math.floor((Date.now() - this.loadingStartedAt) / 1000));
     const remaining = Math.max(0, 120 - seconds);
-    this.loadingText = `Reading vault context and asking Codex... ${seconds}s elapsed, timeout in ${remaining}s.`;
+    this.loadingText = `${seconds}s elapsed, timeout in ${remaining}s`;
     if (this.loadingTextEl) {
       this.loadingTextEl.setText(this.loadingText);
     }
@@ -537,9 +587,11 @@ export class BrainSidebarView extends ItemView {
 
   private renderEmptyState(): void {
     const empty = this.messagesEl.createEl("div", { cls: "brain-chat-empty" });
-    empty.createEl("strong", { text: "Start with a question or rough capture." });
+    const icon = empty.createEl("div", { cls: "brain-chat-empty-icon" });
+    setIcon(icon, "brain-circuit");
+    empty.createEl("strong", { text: "Start with a question or rough capture" });
     empty.createEl("span", {
-      text: " Brain retrieves markdown context, answers with sources, and previews proposed writes before anything changes.",
+      text: "Brain retrieves vault context, answers with sources, and previews writes before anything changes.",
     });
   }
 
@@ -587,12 +639,64 @@ export class BrainSidebarView extends ItemView {
     }
   }
 
+  private isNearBottom(threshold = 60): boolean {
+    const el = this.messagesEl;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }
+
+  private maybeScrollToBottom(): void {
+    if (this.userScrolledUp) {
+      this.updateScrollToBottomButton();
+      return;
+    }
+    this.messagesEl.scrollTo({ top: this.messagesEl.scrollHeight, behavior: "smooth" });
+    this.updateScrollToBottomButton();
+  }
+
+  private updateScrollToBottomButton(): void {
+    if (!this.scrollToBottomEl) {
+      return;
+    }
+    const show = this.userScrolledUp && this.turns.length > 0;
+    this.scrollToBottomEl.toggleClass("brain-scroll-to-bottom--visible", show);
+  }
+
+  private addCopyButtons(container: HTMLElement): void {
+    const codeBlocks = container.querySelectorAll("pre");
+    for (const pre of Array.from(codeBlocks)) {
+      const code = pre.querySelector("code");
+      if (!code) {
+        continue;
+      }
+      const button = document.createElement("button");
+      button.className = "brain-copy-code-button";
+      button.textContent = "Copy";
+      button.setAttribute("aria-label", "Copy code");
+      button.addEventListener("click", () => {
+        void navigator.clipboard.writeText(code.textContent || "").then(() => {
+          button.textContent = "Copied!";
+          button.classList.add("copied");
+          window.setTimeout(() => {
+            button.textContent = "Copy";
+            button.classList.remove("copied");
+          }, 1500);
+        }).catch(() => {
+          button.textContent = "Failed";
+          window.setTimeout(() => {
+            button.textContent = "Copy";
+          }, 1500);
+        });
+      });
+      pre.appendChild(button);
+    }
+  }
+
   private async openSource(path: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
       return;
     }
-    const leaf = this.app.workspace.getLeaf(false);
+    const leaf = this.app.workspace.getLeaf("tab");
     await leaf.openFile(file);
   }
 }

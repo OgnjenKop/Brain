@@ -14,13 +14,14 @@ Brain is now focused on one product direction: an Obsidian-native vault chat tha
 - Safe write operations: append, create
 - AI support: Codex CLI via ChatGPT
 - Installed-bundle smoke test for local Obsidian plugin files
+- Configurable excluded folders for vault queries
+- Strengthened recency tuning (1d/7d/30d/90d score buckets)
+- Session-local conversation history (last 6 exchanges) for contextual follow-ups
 
 ## Near-Term Improvements
 
 1. Improve vault retrieval quality
-   - configurable include/exclude folders
    - better multi-note result grouping
-   - stronger recency tuning
    - frontmatter-aware matching
    - clearer source snippet highlighting
 
@@ -30,17 +31,12 @@ Brain is now focused on one product direction: an Obsidian-native vault chat tha
    - exercise the sidebar chat surface manually or through UI automation
    - capture screenshots of the write preview flow
 
-3. Improve chat memory inside a session
-   - follow-up questions should reuse recent sources
-   - follow-up filing requests should know the previous answer
-   - conversation history should remain session-local unless explicitly saved
-
-4. Improve write previews
+3. Improve write previews
    - clearer warnings for new files
    - open updated files after approval
    - section-level append previews
 
-5. Strengthen instruction support
+4. Strengthen instruction support
    - default examples for common vault layouts
    - validation warnings for contradictory instructions
 

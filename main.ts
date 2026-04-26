@@ -117,7 +117,7 @@ export default class BrainPlugin extends Plugin {
       new Notice(`Could not open ${this.settings.instructionsFile}`);
       return;
     }
-    const leaf = this.app.workspace.getLeaf(false);
+    const leaf = this.app.workspace.getLeaf("tab");
     await leaf.openFile(file);
   }
 

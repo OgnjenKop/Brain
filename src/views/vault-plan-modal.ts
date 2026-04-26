@@ -15,6 +15,8 @@ export class VaultPlanModal extends Modal {
   private working = false;
   private readonly selectedOperations = new Set<number>();
   private readonly draftOperations: VaultWriteOperation[];
+  private approveButtonEl!: HTMLButtonElement;
+  private cancelButtonEl!: HTMLButtonElement;
 
   constructor(
     app: App,
@@ -27,6 +29,13 @@ export class VaultPlanModal extends Modal {
 
   onOpen(): void {
     this.render();
+  }
+
+  close(): void {
+    if (this.working) {
+      return;
+    }
+    super.close();
   }
 
   onClose(): void {
@@ -55,16 +64,18 @@ export class VaultPlanModal extends Modal {
     }
 
     const buttons = this.contentEl.createEl("div", { cls: "brain-button-row" });
-    buttons.createEl("button", {
+    this.approveButtonEl = buttons.createEl("button", {
       cls: "brain-button brain-button-primary",
       text: "Approve and Write",
-    }).addEventListener("click", () => {
+    });
+    this.approveButtonEl.addEventListener("click", () => {
       void this.approve();
     });
-    buttons.createEl("button", {
+    this.cancelButtonEl = buttons.createEl("button", {
       cls: "brain-button",
       text: "Cancel",
-    }).addEventListener("click", () => {
+    });
+    this.cancelButtonEl.addEventListener("click", () => {
       this.close();
     });
   }
@@ -91,6 +102,7 @@ export class VaultPlanModal extends Modal {
       return;
     }
     this.working = true;
+    this.setButtonsEnabled(false);
     try {
       const paths = await this.options.onApprove({
         ...this.options.plan,
@@ -101,11 +113,23 @@ export class VaultPlanModal extends Modal {
         : "No vault changes were applied";
       new Notice(message);
       await this.options.onComplete(message, paths);
+      this.working = false;
       this.close();
     } catch (error) {
       showError(error, "Could not apply vault changes");
+      this.setButtonsEnabled(true);
     } finally {
       this.working = false;
+    }
+  }
+
+  private setButtonsEnabled(enabled: boolean): void {
+    if (this.approveButtonEl) {
+      this.approveButtonEl.disabled = !enabled;
+      this.approveButtonEl.textContent = enabled ? "Approve and Write" : "Writing...";
+    }
+    if (this.cancelButtonEl) {
+      this.cancelButtonEl.disabled = !enabled;
     }
   }
 

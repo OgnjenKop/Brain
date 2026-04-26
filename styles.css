@@ -1,8 +1,35 @@
+@keyframes brain-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes brain-loading-dots {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .brain-sidebar,
 .brain-modal {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.brain-modal {
+  max-height: 92vh;
+  overflow-y: auto;
 }
 
 .brain-header h2 {
@@ -29,6 +56,13 @@
   color: var(--text-normal);
   padding: 0.75rem;
   font: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.brain-modal-input:focus-visible {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 }
 
 .brain-modal-input[type="text"] {
@@ -54,11 +88,20 @@
   background: var(--background-secondary);
   color: var(--text-normal);
   border: 1px solid var(--background-modifier-border);
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.brain-button:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
 }
 
 .brain-button-primary {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
+}
+
+.brain-button-primary:hover:not(:disabled) {
+  background: var(--interactive-accent-hover);
 }
 
 .brain-button-stop:not(:disabled) {
@@ -74,14 +117,51 @@
   cursor: not-allowed;
 }
 
+.brain-messages-container {
+  position: relative;
+}
+
 .brain-chat-messages {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   min-height: 260px;
   max-height: 55vh;
-  overflow: auto;
+  overflow-y: auto;
+  scroll-behavior: smooth;
   padding-right: 0.1rem;
+}
+
+.brain-scroll-to-bottom {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 1rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.12s ease;
+  z-index: 10;
+}
+
+.brain-scroll-to-bottom--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.brain-scroll-to-bottom:hover {
+  background: var(--background-modifier-hover);
 }
 
 .brain-chat-message {
@@ -89,11 +169,15 @@
   flex-direction: column;
   gap: 0.35rem;
   max-width: 100%;
+  animation: brain-fade-in-up 0.25s ease-out;
 }
 
 .brain-chat-role {
   font-size: 0.82rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .brain-chat-message-user {
@@ -113,16 +197,57 @@
   max-width: 100%;
 }
 
-.brain-chat-empty,
+.brain-chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.6rem;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 1.5rem 1rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  min-height: 180px;
+  animation: brain-fade-in-up 0.3s ease-out;
+}
+
+.brain-chat-empty-icon {
+  color: var(--text-faint);
+  opacity: 0.6;
+}
+
+.brain-chat-empty strong {
+  color: var(--text-normal);
+  font-size: 1.05rem;
+}
+
 .brain-chat-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--text-muted);
 }
 
-.brain-chat-empty {
-  border: 1px dashed var(--background-modifier-border);
-  border-radius: 8px;
-  padding: 0.9rem;
-  line-height: 1.45;
+.brain-status-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.brain-status-indicator--ok {
+  background: var(--text-success);
+}
+
+.brain-status-indicator--warn {
+  background: var(--text-warning);
+}
+
+.brain-status-indicator--error {
+  background: var(--text-error);
 }
 
 .brain-prompt-chips {
@@ -138,11 +263,13 @@
   color: var(--text-muted);
   border: 1px solid var(--background-modifier-border);
   font-size: 0.82rem;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 
 .brain-prompt-chip:hover {
   color: var(--text-normal);
   background: var(--background-secondary);
+  border-color: var(--background-modifier-border-hover);
 }
 
 .brain-model-row {
@@ -174,12 +301,36 @@
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
   background: var(--background-primary);
+  transition: border-color 0.15s ease;
+}
+
+.brain-sources[open] {
+  border-color: var(--background-modifier-border-hover);
 }
 
 .brain-sources summary {
   cursor: pointer;
   color: var(--text-muted);
   font-size: 0.86rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.brain-sources summary::-webkit-details-marker {
+  display: none;
+}
+
+.brain-sources summary::before {
+  content: "▸";
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.brain-sources[open] summary::before {
+  transform: rotate(90deg);
 }
 
 .brain-source {
@@ -187,6 +338,7 @@
   flex-direction: column;
   gap: 0.25rem;
   padding-top: 0.65rem;
+  animation: brain-fade-in-up 0.2s ease-out;
 }
 
 .brain-updated-files {
@@ -202,6 +354,19 @@
 .brain-source-title {
   font-weight: 600;
   overflow-wrap: anywhere;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.12s ease;
+}
+
+.brain-source-title:hover {
+  color: var(--interactive-accent);
+  text-decoration: underline;
 }
 
 .brain-source-reason {
@@ -220,14 +385,40 @@
   font-size: 0.84rem;
   max-height: 180px;
   overflow: auto;
+  border-radius: 0 4px 4px 0;
 }
 
 .brain-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   color: var(--text-muted);
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
-  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  max-width: 85%;
+}
+
+.brain-loading-dots {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.brain-loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: brain-loading-dots 1.4s infinite ease-in-out both;
+}
+
+.brain-loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.brain-loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
 }
 
 .brain-plan-operation {
@@ -238,6 +429,7 @@
   border-radius: 8px;
   padding: 0.75rem;
   background: var(--background-secondary);
+  animation: brain-fade-in-up 0.2s ease-out;
 }
 
 .brain-plan-operation-header {
@@ -283,6 +475,13 @@
   color: var(--text-normal);
   padding: 0.75rem;
   font: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.brain-chat-input:focus-visible {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 }
 
 .brain-output,
@@ -316,17 +515,37 @@
   white-space: pre-wrap;
 }
 
-.brain-source-title {
-  align-self: flex-start;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-normal);
-  cursor: pointer;
-  text-align: left;
+.brain-output pre {
+  position: relative;
 }
 
-.brain-source-title:hover {
-  color: var(--interactive-accent);
-  text-decoration: underline;
+.brain-copy-code-button {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.brain-output pre:hover .brain-copy-code-button,
+.brain-copy-code-button:focus-visible {
+  opacity: 1;
+}
+
+.brain-copy-code-button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.brain-copy-code-button.copied {
+  color: var(--text-success);
+  border-color: var(--text-success);
+  opacity: 1;
 }
