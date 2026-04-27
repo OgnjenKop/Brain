@@ -30,7 +30,6 @@ export class BrainSidebarView extends ItemView {
   private modelRowEl!: HTMLElement;
   private sendButtonEl!: HTMLButtonElement;
   private stopButtonEl!: HTMLButtonElement;
-  private promptChipsEl!: HTMLElement;
   private modelOptions: CodexModelOption[] = DEFAULT_CODEX_MODEL_OPTIONS;
   private modelOptionsLoading = false;
   private customModelDraft = false;
@@ -105,7 +104,6 @@ export class BrainSidebarView extends ItemView {
     });
     this.updateScrollToBottomButton();
 
-    const composer = this.contentEl.createEl("div", { cls: "brain-composer" });
     this.inputEl = this.contentEl.createEl("textarea", {
       cls: "brain-chat-input",
       attr: {
@@ -113,7 +111,6 @@ export class BrainSidebarView extends ItemView {
         rows: "4",
       },
     });
-    composer.appendChild(this.inputEl);
     this.inputEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -121,16 +118,10 @@ export class BrainSidebarView extends ItemView {
       }
     });
     this.inputEl.addEventListener("input", () => {
-      this.updateComposerState();
+      this.autoResizeInput();
     });
 
-    const chipsRow = this.contentEl.createEl("div", { cls: "brain-chips-row" });
-    this.promptChipsEl = chipsRow.createEl("div", { cls: "brain-prompt-chips" });
-    this.createPromptChip(this.promptChipsEl, "What do I know about...", "What do I know about ");
-    this.createPromptChip(this.promptChipsEl, "File this", "File this in the right place:\n\n");
-    this.createPromptChip(this.promptChipsEl, "Find related notes", "Find related notes for ");
-
-    const actions = chipsRow.createEl("div", { cls: "brain-actions" });
+    const actions = this.contentEl.createEl("div", { cls: "brain-actions" });
     this.sendButtonEl = actions.createEl("button", {
       cls: "brain-button brain-button-primary brain-button-send",
       text: "Send",
@@ -139,7 +130,7 @@ export class BrainSidebarView extends ItemView {
       void this.sendMessage();
     });
     this.stopButtonEl = actions.createEl("button", {
-      cls: "brain-button brain-button-stop brain-button-send brain-button-hidden",
+      cls: "brain-button brain-button-stop brain-button-hidden",
       text: "Stop",
     });
     this.stopButtonEl.addEventListener("click", () => {
@@ -148,7 +139,7 @@ export class BrainSidebarView extends ItemView {
     this.stopButtonEl.hidden = true;
 
     this.statusEl = this.contentEl.createEl("div", { cls: "brain-chat-status" });
-    this.updateComposerState();
+    this.autoResizeInput();
     await this.refreshStatus();
   }
 
@@ -191,7 +182,7 @@ export class BrainSidebarView extends ItemView {
     }
 
     this.inputEl.value = "";
-    this.updateComposerState();
+    this.autoResizeInput();
     this.userScrolledUp = false;
     this.addTurn("user", message);
     this.setLoading(true, "query");
@@ -231,17 +222,6 @@ export class BrainSidebarView extends ItemView {
 
   private stopCurrentRequest(): void {
     this.currentAbortController?.abort();
-  }
-
-  private createPromptChip(container: HTMLElement, label: string, prompt: string): void {
-    container.createEl("button", {
-      cls: "brain-prompt-chip",
-      text: label,
-    }).addEventListener("click", () => {
-      this.inputEl.value = prompt;
-      this.updateComposerState();
-      this.inputEl.focus();
-    });
   }
 
   private renderModelSelector(): void {
@@ -376,10 +356,6 @@ export class BrainSidebarView extends ItemView {
     this.renderModelSelector();
   }
 
-  private updateComposerState(): void {
-    this.autoResizeInput();
-  }
-
   private autoResizeInput(): void {
     if (this.resizeFrameId !== null) {
       cancelAnimationFrame(this.resizeFrameId);
@@ -413,10 +389,6 @@ export class BrainSidebarView extends ItemView {
     const emptyEl = this.messagesEl.querySelector(".brain-chat-empty");
     if (emptyEl) {
       emptyEl.remove();
-    }
-
-    if (this.promptChipsEl) {
-      this.promptChipsEl.hidden = true;
     }
 
     this.removeLoadingIndicator();
@@ -496,14 +468,8 @@ export class BrainSidebarView extends ItemView {
     const generation = ++this.renderGeneration;
     this.messagesEl.empty();
     if (!this.turns.length) {
-      if (this.promptChipsEl) {
-        this.promptChipsEl.hidden = false;
-      }
       this.renderEmptyState();
       return;
-    }
-    if (this.promptChipsEl) {
-      this.promptChipsEl.hidden = true;
     }
     for (const turn of this.turns) {
       if (generation !== this.renderGeneration) {
