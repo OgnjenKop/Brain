@@ -4,6 +4,11 @@ import { getCodexRuntime, isAbortError, isEnoentError, isTimeoutError } from "..
 
 const CODEX_CHAT_TIMEOUT_MS = 120000;
 
+interface ExecResult {
+  stdout: string;
+  stderr: string;
+}
+
 export class BrainAIService {
   async completeChat(
     messages: Array<{ role: "system" | "user"; content: string }>,
@@ -21,10 +26,12 @@ export class BrainAIService {
     signal?: AbortSignal,
   ): Promise<string> {
     const { execFile, fs, os, path } = getCodexRuntime();
+
     const codexBinary = await getCodexBinaryPath();
     if (!codexBinary) {
       throw new Error("Codex CLI is not installed. Install `@openai/codex` and run `codex login` first.");
     }
+
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "brain-codex-"));
     const outputFile = path.join(tempDir, "response.txt");
     const args = [
@@ -49,28 +56,53 @@ export class BrainAIService {
     args.push("-");
     const prompt = this.buildCodexPrompt(messages);
 
+    let execResult: ExecResult | null = null;
+
     try {
-      await execFileWithAbort(codexBinary, args, {
+      execResult = await execFileWithAbort(codexBinary, args, {
         maxBuffer: 1024 * 1024 * 4,
         cwd: tempDir,
         timeout: CODEX_CHAT_TIMEOUT_MS,
         signal,
         stdin: prompt,
       }, execFile);
-      const content = await fs.readFile(outputFile, "utf8");
+
+      let content: string;
+      try {
+        content = await fs.readFile(outputFile, "utf8");
+      } catch {
+        if (execResult.stdout.trim()) {
+          content = execResult.stdout.trim();
+        } else if (execResult.stderr.trim()) {
+          throw new Error(`Codex did not produce output. Details: ${execResult.stderr.trim().slice(0, 500)}`);
+        } else {
+          throw new Error("Codex did not produce any output. The CLI may require a newer version or a different configuration.");
+        }
+      }
+
       if (!content.trim()) {
-        throw new Error("Codex returned an empty response");
+        throw new Error("Codex returned an empty response.");
       }
       return content.trim();
     } catch (error) {
+      if (signal?.aborted || isAbortError(error)) {
+        throw new Error("Codex request stopped.");
+      }
+      if (isTimeoutError(error)) {
+        throw new Error(
+          "Codex did not respond in time. Try again, or check `codex login status` outside Brain. " +
+          "If Codex requires approval for shell commands, configure it for non-interactive use.",
+        );
+      }
       if (isEnoentError(error)) {
         throw new Error("Codex CLI is not installed. Install `@openai/codex` and run `codex login` first.");
       }
-      if (isTimeoutError(error)) {
-        throw new Error("Codex did not respond in time. Try again, or check `codex login status` outside Brain.");
-      }
-      if (signal?.aborted || isAbortError(error)) {
-        throw new Error("Codex request stopped.");
+
+      const stderrDetail = execResult?.stderr?.trim()
+        || getErrorDetail(error, "stderr")
+        || "";
+      if (stderrDetail && error instanceof Error) {
+        throw new Error(`${error.message}\nCodex stderr: ${stderrDetail.slice(0, 500)}`);
       }
       throw error;
     } finally {
@@ -81,9 +113,20 @@ export class BrainAIService {
   private buildCodexPrompt(
     messages: Array<{ role: "system" | "user"; content: string }>,
   ): string {
-    return messages
-      .map((message) => `${message.role.toUpperCase()}:\n${message.content}`)
-      .join("\n\n");
+    const parts: string[] = [];
+
+    for (const message of messages) {
+      if (message.role === "system") {
+        parts.push(message.content);
+      } else {
+        parts.push("");
+        parts.push("---");
+        parts.push("");
+        parts.push(message.content);
+      }
+    }
+
+    return parts.join("\n");
   }
 }
 
@@ -95,20 +138,24 @@ function execFileWithAbort(
     stdin?: string;
   },
   execFile: ReturnType<typeof getCodexRuntime>["execFile"],
-): Promise<void> {
+): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const { signal, stdin, ...execOptions } = options;
-    const child = execFile(file, args, execOptions, (error) => {
+    const child = execFile(file, args, execOptions, (error, stdout, stderr) => {
       if (settled) {
         return;
       }
       settled = true;
       signal?.removeEventListener("abort", abort);
       if (error) {
-        reject(error);
+        const enriched = enrichError(error, stdout, stderr);
+        reject(enriched);
       } else {
-        resolve();
+        resolve({
+          stdout: bufferToString(stdout),
+          stderr: bufferToString(stderr),
+        });
       }
     });
     if (stdin !== undefined) {
@@ -135,4 +182,31 @@ function execFileWithAbort(
   });
 }
 
+function bufferToString(value: string | Buffer): string {
+  return Buffer.isBuffer(value) ? value.toString("utf8") : value;
+}
 
+function enrichError(
+  error: import("child_process").ExecFileException,
+  stdout: string | Buffer,
+  stderr: string | Buffer,
+): import("child_process").ExecFileException {
+  return Object.assign(error, {
+    stdout: bufferToString(stdout),
+    stderr: bufferToString(stderr),
+  });
+}
+
+function getErrorDetail(error: unknown, key: string): string {
+  if (typeof error !== "object" || error === null || !(key in error)) {
+    return "";
+  }
+  const value = (error as Record<string, unknown>)[key];
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString("utf8").trim();
+  }
+  return "";
+}

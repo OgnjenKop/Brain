@@ -214,5 +214,5 @@ function extractJson(text: string): string | null {
 }
 
 function isPlanObject(value: unknown): value is VaultWritePlan {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
