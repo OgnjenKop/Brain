@@ -198,7 +198,7 @@ function buildReason(file: TFile, text: string, query: string, tokens: string[])
     if (lowerText.match(new RegExp(`(^|\\n)#{1,6}[^\\n]*${escapeRegExp(token)}`))) {
       reasons.add(`heading matches "${token}"`);
     }
-    if (lowerText.includes(`[[${token}`) || lowerText.includes(`${token}]]`)) {
+    if (new RegExp(`\\[\\[[^\\]]*${escapeRegExp(token)}[^\\]]*\\]\\]`, "i").test(lowerText)) {
       reasons.add(`link mentions "${token}"`);
     }
     if (lowerText.match(new RegExp(`(^|\\s)#[-/_a-z0-9]*${escapeRegExp(token)}[-/_a-z0-9]*`, "i"))) {

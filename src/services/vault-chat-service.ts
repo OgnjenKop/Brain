@@ -18,12 +18,6 @@ export interface ChatExchange {
   text: string;
 }
 
-const EMPTY_PLAN: VaultWritePlan = {
-  summary: "",
-  confidence: "low",
-  operations: [],
-  questions: [],
-};
 const CHAT_CONTEXT_LIMIT = 6;
 const MAX_HISTORY_EXCHANGES = 6;
 const MAX_CONTEXT_EXCERPT_CHARS = 1200;
@@ -190,7 +184,7 @@ function parseChatResponse(response: string): {
     };
     return {
       answer: typeof parsed.answer === "string" ? parsed.answer.trim() : "",
-      plan: isPlanObject(parsed.plan) ? parsed.plan : EMPTY_PLAN,
+      plan: isPlanObject(parsed.plan) ? parsed.plan : null,
     };
   } catch {
     return {

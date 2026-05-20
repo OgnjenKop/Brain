@@ -79,7 +79,7 @@ function buildCodexCandidates(pathModule: typeof import("path"), homeDir: string
     candidates.add(pathModule.join(entry, codexExecutableName()));
   }
 
-  const commonDirs = [
+  const commonDirs: string[] = [
     "/opt/homebrew/bin",
     "/usr/local/bin",
     `${homeDir}/.local/bin`,
@@ -88,6 +88,15 @@ function buildCodexCandidates(pathModule: typeof import("path"), homeDir: string
     `${homeDir}/.antigravity/antigravity/bin`,
     "/Applications/Codex.app/Contents/Resources",
   ];
+
+  if (process.platform === "win32") {
+    if (process.env.APPDATA) {
+      commonDirs.push(pathModule.join(process.env.APPDATA, "npm"));
+    }
+    if (process.env.LOCALAPPDATA) {
+      commonDirs.push(pathModule.join(process.env.LOCALAPPDATA, "Programs", "Codex"));
+    }
+  }
 
   for (const dir of commonDirs) {
     candidates.add(pathModule.join(dir, codexExecutableName()));

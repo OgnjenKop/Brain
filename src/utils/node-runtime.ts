@@ -48,7 +48,7 @@ export function getCodexRuntime(): {
 export function getExecFileAsync(): (
   file: string,
   args?: readonly string[],
-  options?: Record<string, unknown>,
+  options?: import("child_process").ExecFileOptions,
 ) => Promise<{ stdout: string; stderr: string }> {
   const req = getNodeRequire();
   const { execFile } = req("child_process") as typeof import("child_process");
@@ -56,7 +56,7 @@ export function getExecFileAsync(): (
   return promisify(execFile) as (
     file: string,
     args?: readonly string[],
-    options?: Record<string, unknown>,
+    options?: import("child_process").ExecFileOptions,
   ) => Promise<{ stdout: string; stderr: string }>;
 }
 

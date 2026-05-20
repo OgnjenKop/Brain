@@ -231,6 +231,7 @@ export class BrainSidebarView extends ItemView {
         cls: "brain-model-active",
         text: "Loading Codex models...",
       });
+      return;
     }
     const select = this.modelRowEl.createEl("select", {
       cls: "brain-model-select",
