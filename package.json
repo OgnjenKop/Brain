@@ -3,7 +3,7 @@
   "version": "0.4.0",
   "private": true,
   "license": "MIT",
-  "description": "Markdown-first AI-assisted second brain for Obsidian.",
+  "description": "Markdown-first vault chat for Obsidian.",
   "keywords": [
     "obsidian",
     "plugin",

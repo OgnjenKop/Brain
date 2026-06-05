@@ -190,14 +190,32 @@ function enrichError(
   error: import("child_process").ExecFileException,
   stdout: string | Buffer,
   stderr: string | Buffer,
-): import("child_process").ExecFileException {
-  return Object.assign(error, {
-    stdout: bufferToString(stdout),
-    stderr: bufferToString(stderr),
-  });
+): CodexExecutionError {
+  const stdoutText = bufferToString(stdout);
+  const stderrText = bufferToString(stderr);
+  const wrapped = new CodexExecutionError(error.message, error);
+  wrapped.stdout = stdoutText;
+  wrapped.stderr = stderrText;
+  if (error.code !== null) {
+    wrapped.code = error.code;
+  }
+  wrapped.killed = error.killed ?? false;
+  return wrapped;
 }
 
-function getErrorDetail(error: unknown, key: string): string {
+class CodexExecutionError extends Error {
+  stdout = "";
+  stderr = "";
+  code: string | number | undefined = undefined;
+  killed = false;
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "CodexExecutionError";
+    (this as Error & { cause?: unknown }).cause = cause;
+  }
+}
+
+function getErrorDetail(error: unknown, key: "stdout" | "stderr"): string {
   if (typeof error !== "object" || error === null || !(key in error)) {
     return "";
   }

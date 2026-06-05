@@ -2,6 +2,8 @@ import { BrainPluginSettings } from "../settings/settings";
 import { isSafeMarkdownPath } from "../utils/path-safety";
 import { VaultService } from "./vault-service";
 
+const MAX_OPERATIONS = 8;
+
 export type VaultWriteOperation =
   | {
       type: "append";
@@ -21,6 +23,7 @@ export interface VaultWritePlan {
   confidence: "low" | "medium" | "high";
   operations: VaultWriteOperation[];
   questions: string[];
+  droppedOperations: number;
 }
 
 export class VaultWriteService {
@@ -31,19 +34,24 @@ export class VaultWriteService {
 
   normalizePlan(plan: Partial<VaultWritePlan> | Record<string, unknown>): VaultWritePlan {
     const confidence = readConfidence(plan.confidence);
+    const rawOperations = Array.isArray(plan.operations) ? plan.operations : [];
+    const validOperations = rawOperations
+      .map((operation) => this.normalizeOperation(operation))
+      .filter((operation): operation is VaultWriteOperation => operation !== null);
+    const droppedFromSafety = rawOperations.length - validOperations.length;
+    const totalAfterLimit = validOperations.slice(0, MAX_OPERATIONS);
+    const droppedFromLimit = validOperations.length - totalAfterLimit.length;
     return {
       summary: typeof plan.summary === "string" && plan.summary.trim()
         ? plan.summary.trim()
         : "Brain proposed vault updates.",
       confidence,
-      operations: (Array.isArray(plan.operations) ? plan.operations : [])
-        .map((operation) => this.normalizeOperation(operation))
-        .filter((operation): operation is VaultWriteOperation => operation !== null)
-        .slice(0, 8),
+      operations: totalAfterLimit,
       questions: (Array.isArray(plan.questions) ? plan.questions : [])
         .map((question) => String(question).trim())
         .filter(Boolean)
         .slice(0, 5),
+      droppedOperations: droppedFromSafety + droppedFromLimit,
     };
   }
 

@@ -50,6 +50,18 @@ export class VaultPlanModal extends Modal {
       text: `${this.options.plan.summary || "Brain proposed vault changes."} Confidence: ${this.options.plan.confidence}.`,
     });
 
+    if (this.options.plan.droppedOperations > 0) {
+      const dropped = this.contentEl.createEl("div", {
+        cls: "brain-plan-dropped",
+      });
+      dropped.createEl("strong", {
+        text: `${this.options.plan.droppedOperations} proposed change${this.options.plan.droppedOperations === 1 ? " was" : "s were"} skipped`,
+      });
+      dropped.createEl("span", {
+        text: "Brain's plan included changes that targeted non-markdown paths, the instructions file, dot-folders, or paths with `..`. Edit the remaining operations below, or ask Brain to retry.",
+      });
+    }
+
     for (const [index, operation] of this.draftOperations.entries()) {
       this.renderOperation(index, operation);
     }

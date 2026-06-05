@@ -10,12 +10,16 @@ import {
   isKnownCodexModel,
 } from "../utils/codex-models";
 
+const MODEL_SECTION_CLASS = "brain-settings-model-section";
+
 export class BrainSettingTab extends PluginSettingTab {
   plugin: BrainPlugin;
   private modelOptions: CodexModelOption[] = DEFAULT_CODEX_MODEL_OPTIONS;
   private modelOptionsLoading = false;
   private modelOptionsLoaded = false;
   private customModelDraft = false;
+  private modelSectionEl: HTMLElement | null = null;
+  private statusSetting: Setting | null = null;
 
   constructor(app: App, plugin: BrainPlugin) {
     super(app, plugin);
@@ -25,11 +29,25 @@ export class BrainSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.addClass("brain-settings");
     containerEl.createEl("h2", { text: "Brain Settings" });
+
+    this.renderStorageSection(containerEl);
+
+    containerEl.createEl("h3", { text: "Codex CLI" });
+
+    this.renderCodexSetupSection(containerEl);
+    this.renderStatusSection(containerEl);
+    this.renderModelSection(containerEl);
+
     if (!this.modelOptionsLoading && !this.modelOptionsLoaded) {
       void this.refreshModelOptions();
+    } else {
+      this.updateModelControlsState();
     }
+  }
 
+  private renderStorageSection(containerEl: HTMLElement): void {
     containerEl.createEl("h3", { text: "Storage" });
 
     new Setting(containerEl)
@@ -83,11 +101,16 @@ export class BrainSettingTab extends PluginSettingTab {
           void this.plugin.saveSettings();
         });
       });
+  }
 
-    containerEl.createEl("h3", { text: "Codex CLI" });
+  private renderStatusSection(containerEl: HTMLElement): void {
+    this.statusSetting = new Setting(containerEl)
+      .setName("Codex status")
+      .setDesc("Checking Codex CLI status...");
+    void this.refreshCodexStatus(this.statusSetting);
+  }
 
-    this.createCodexStatusSetting(containerEl);
-
+  private renderCodexSetupSection(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName("Codex setup")
       .setDesc(
@@ -104,12 +127,18 @@ export class BrainSettingTab extends PluginSettingTab {
       .addButton((button) =>
         button
           .setButtonText("Recheck Status")
-          .onClick(() => {
-            this.display();
+          .onClick(async () => {
+            this.statusSetting?.setDesc("Rechecking Codex CLI status...");
+            await this.refreshCodexStatus(this.statusSetting, true);
+            this.updateModelControlsState();
           }),
       );
+  }
 
-    const modelSetting = new Setting(containerEl)
+  private renderModelSection(containerEl: HTMLElement): void {
+    const wrapper = containerEl.createDiv({ cls: MODEL_SECTION_CLASS });
+    this.modelSectionEl = wrapper;
+    new Setting(wrapper)
       .setName("Codex model")
       .setDesc(
         this.modelOptionsLoading
@@ -130,22 +159,22 @@ export class BrainSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             if (value === CUSTOM_CODEX_MODEL_VALUE) {
               this.customModelDraft = true;
-              this.display();
+              this.refreshModelSection();
               return;
             }
             this.customModelDraft = false;
             this.plugin.settings.codexModel = value;
             await this.plugin.saveSettings();
-            this.display();
+            this.refreshModelSection();
+            this.updateStatusFromSettings();
           });
-      });
-    modelSetting.addButton((button) =>
-      button
-        .setButtonText("Reload")
-        .onClick(() => {
+      })
+      .addButton((button) => {
+        button.setButtonText("Reload");
+        button.onClick(() => {
           void this.refreshModelOptions();
-        }),
-    );
+        });
+      });
 
     if (
       this.customModelDraft ||
@@ -155,11 +184,11 @@ export class BrainSettingTab extends PluginSettingTab {
         ? ""
         : this.plugin.settings.codexModel;
       if (this.customModelDraft && this.plugin.settings.codexModel.trim()) {
-        new Setting(containerEl)
+        new Setting(wrapper)
           .setName("Active Codex model")
           .setDesc(this.plugin.settings.codexModel.trim());
       }
-      new Setting(containerEl)
+      new Setting(wrapper)
         .setName("Custom Codex model")
         .setDesc("Exact model id passed to `codex exec --model`.")
         .addText((text) => {
@@ -179,17 +208,50 @@ export class BrainSettingTab extends PluginSettingTab {
           });
         });
     }
+
+    this.updateModelControlsState();
+  }
+
+  private updateModelControlsState(): void {
+    if (!this.modelSectionEl) {
+      return;
+    }
+    const disabled = this.modelOptionsLoading;
+    this.modelSectionEl
+      .querySelectorAll<HTMLSelectElement | HTMLButtonElement>("select, button")
+      .forEach((el) => {
+        el.disabled = disabled;
+      });
   }
 
   private async refreshModelOptions(): Promise<void> {
     this.modelOptionsLoading = true;
-    this.display();
+    this.refreshModelSection();
     try {
       this.modelOptions = await getSupportedCodexModelOptions();
     } finally {
       this.modelOptionsLoaded = true;
       this.modelOptionsLoading = false;
-      this.display();
+      this.refreshModelSection();
+    }
+  }
+
+  private refreshModelSection(): void {
+    if (!this.modelSectionEl) {
+      return;
+    }
+    const parent = this.modelSectionEl.parentElement;
+    if (!parent) {
+      return;
+    }
+    const wasFocused = this.modelSectionEl.contains(document.activeElement);
+    this.modelSectionEl.remove();
+    this.renderModelSection(parent);
+    if (wasFocused && this.modelSectionEl) {
+      const focusable = this.modelSectionEl.querySelector<HTMLElement>(
+        "input:not([type='hidden']):not([disabled]), select:not([disabled]), button:not([disabled])",
+      );
+      focusable?.focus();
     }
   }
 
@@ -197,23 +259,29 @@ export class BrainSettingTab extends PluginSettingTab {
     const model = value.trim();
     if (!model) {
       this.customModelDraft = false;
-      this.display();
+      this.refreshModelSection();
       return;
     }
     this.customModelDraft = false;
     this.plugin.settings.codexModel = model;
     await this.plugin.saveSettings();
-    this.display();
+    this.refreshModelSection();
+    this.updateStatusFromSettings();
   }
 
-  private createCodexStatusSetting(containerEl: HTMLElement): void {
-    const statusSetting = new Setting(containerEl)
-      .setName("Codex status")
-      .setDesc("Checking Codex CLI status...");
-    void this.refreshCodexStatus(statusSetting);
+  private updateStatusFromSettings(): void {
+    if (this.statusSetting) {
+      void this.refreshCodexStatus(this.statusSetting);
+    }
   }
 
-  private async refreshCodexStatus(setting: Setting): Promise<void> {
+  private async refreshCodexStatus(setting: Setting | null, force = false): Promise<void> {
+    if (!setting) {
+      return;
+    }
+    if (force) {
+      setting.setDesc("Rechecking Codex CLI status...");
+    }
     try {
       const status = await getAIConfigurationStatus(this.plugin.settings);
       setting.setDesc(status.message);

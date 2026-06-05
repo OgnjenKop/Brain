@@ -7,57 +7,54 @@
  * be statically bundled.
  */
 
+import type { ChildProcess, ExecFileException, ExecFileOptions } from "child_process";
+import type { PathLike } from "fs";
+
 export function getNodeRequire(): NodeRequire {
   return Function("return require")() as NodeRequire;
 }
 
+type ExecFileFn = (
+  file: string,
+  args?: readonly string[],
+  options?: ExecFileOptions,
+  callback?: (
+    error: ExecFileException | null,
+    stdout: string | Buffer,
+    stderr: string | Buffer,
+  ) => void,
+) => ChildProcess;
+
+type ExecFileAsyncFn = (
+  file: string,
+  args?: readonly string[],
+  options?: ExecFileOptions,
+) => Promise<{ stdout: string; stderr: string }>;
+
+function getChildProcess(): { execFile: ExecFileFn } {
+  const req = getNodeRequire();
+  return req("child_process") as { execFile: ExecFileFn };
+}
+
 export function getCodexRuntime(): {
-  execFile: (
-    file: string,
-    args?: readonly string[],
-    options?: import("child_process").ExecFileOptions,
-    callback?: (
-      error: import("child_process").ExecFileException | null,
-      stdout: string | Buffer,
-      stderr: string | Buffer,
-    ) => void,
-  ) => import("child_process").ChildProcess;
+  execFile: ExecFileFn;
   fs: typeof import("fs/promises");
   os: typeof import("os");
   path: typeof import("path");
 } {
   const req = getNodeRequire();
-  const { execFile } = req("child_process") as typeof import("child_process");
   return {
-    execFile: execFile as (
-      file: string,
-      args?: readonly string[],
-      options?: import("child_process").ExecFileOptions,
-      callback?: (
-        error: import("child_process").ExecFileException | null,
-        stdout: string | Buffer,
-        stderr: string | Buffer,
-      ) => void,
-    ) => import("child_process").ChildProcess,
+    execFile: getChildProcess().execFile,
     fs: req("fs/promises") as typeof import("fs/promises"),
     os: req("os") as typeof import("os"),
     path: req("path") as typeof import("path"),
   };
 }
 
-export function getExecFileAsync(): (
-  file: string,
-  args?: readonly string[],
-  options?: import("child_process").ExecFileOptions,
-) => Promise<{ stdout: string; stderr: string }> {
+export function getExecFileAsync(): ExecFileAsyncFn {
   const req = getNodeRequire();
-  const { execFile } = req("child_process") as typeof import("child_process");
   const { promisify } = req("util") as typeof import("util");
-  return promisify(execFile) as (
-    file: string,
-    args?: readonly string[],
-    options?: import("child_process").ExecFileOptions,
-  ) => Promise<{ stdout: string; stderr: string }>;
+  return promisify(getChildProcess().execFile) as unknown as ExecFileAsyncFn;
 }
 
 export function isEnoentError(error: unknown): error is NodeJS.ErrnoException {

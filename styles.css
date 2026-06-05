@@ -57,26 +57,53 @@
   line-height: 1.3;
 }
 
-.brain-chat-input {
-  width: 100%;
-  min-height: 80px;
-  max-height: 200px;
-  resize: vertical;
-  border-radius: 8px;
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-secondary);
-  color: var(--text-normal);
-  padding: 0.6rem 0.7rem;
-  font: inherit;
-  font-size: 0.88rem;
-  line-height: 1.4;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+.brain-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  margin-top: 0.2rem;
 }
 
-.brain-chat-input:focus-visible {
-  outline: none;
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+.brain-button-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  padding: 0.2rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.brain-button-ghost:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.brain-button-small {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.brain-button-ghost > span {
+  line-height: 1;
+}
+
+.brain-keyboard-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin-top: 0.2rem;
+}
+
+.brain-keyboard-hint kbd {
+  font-family: var(--font-monospace);
+  font-size: 0.7rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
 }
 
 .brain-actions {
@@ -239,6 +266,21 @@
 
 .brain-chat-message-brain .brain-output {
   max-width: 100%;
+}
+
+.brain-chat-message-error .brain-output {
+  border-color: var(--text-error);
+  background: color-mix(in srgb, var(--text-error) 8%, var(--background-secondary));
+  color: var(--text-normal);
+}
+
+.brain-chat-message-error .brain-chat-role {
+  color: var(--text-error);
+}
+
+.brain-chat-message-info .brain-output {
+  border-style: dashed;
+  color: var(--text-muted);
 }
 
 .brain-chat-empty {
@@ -427,53 +469,6 @@
   border-radius: 0 4px 4px 0;
 }
 
-.brain-plan-operation {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
-  padding: 0.6rem;
-  background: var(--background-secondary);
-  animation: brain-fade-in-up 0.2s ease-out;
-  font-size: 0.86rem;
-}
-
-.brain-plan-operation-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 500;
-}
-
-.brain-plan-path {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  overflow-wrap: anywhere;
-}
-
-.brain-plan-description {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.brain-plan-path-input {
-  min-height: auto;
-  font-size: 0.84rem;
-}
-
-.brain-plan-editor {
-  min-height: 160px;
-  background: var(--background-primary);
-  font-family: var(--font-monospace);
-  font-size: 0.84rem;
-}
-
-.brain-plan-questions h3 {
-  margin-bottom: 0.2rem;
-  font-size: 0.9rem;
-}
-
 .brain-loading {
   display: flex;
   align-items: center;
@@ -569,6 +564,23 @@
 
 .brain-plan-questions h3 {
   margin-bottom: 0.25rem;
+}
+
+.brain-plan-dropped {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 1px solid var(--text-warning);
+  background: color-mix(in srgb, var(--text-warning) 10%, var(--background-secondary));
+  color: var(--text-normal);
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.brain-plan-dropped strong {
+  color: var(--text-warning);
+  font-size: 0.9rem;
 }
 
 .brain-chat-input {

@@ -4,8 +4,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const vaultPath = process.env.OBSIDIAN_VAULT
-  ?? "/Users/ognjen.koprivica/Documents/Obsidian_Vault";
+const vaultPath = process.env.OBSIDIAN_VAULT;
+if (!vaultPath) {
+  console.error("OBSIDIAN_VAULT env var is required. Set it to the path of the Obsidian vault to verify against.");
+  process.exit(1);
+}
 const pluginDir = resolve(vaultPath, ".obsidian/plugins/brain");
 const requiredFiles = ["main.js", "manifest.json", "styles.css"];
 

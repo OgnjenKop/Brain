@@ -1,4 +1,4 @@
-import { App, ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import BrainPlugin from "../../main";
 import { VaultChatResponse, ChatExchange } from "../services/vault-chat-service";
 import type { VaultQueryMatch } from "../services/vault-query-service";
@@ -15,7 +15,7 @@ import {
 } from "../utils/codex-models";
 
 interface ChatTurn {
-  role: "user" | "brain";
+  role: "user" | "brain" | "error" | "info";
   text: string;
   sources?: VaultQueryMatch[];
   updatedPaths?: string[];
@@ -30,9 +30,14 @@ export class BrainSidebarView extends ItemView {
   private modelRowEl!: HTMLElement;
   private sendButtonEl!: HTMLButtonElement;
   private stopButtonEl!: HTMLButtonElement;
+  private clearButtonEl!: HTMLButtonElement;
   private modelOptions: CodexModelOption[] = DEFAULT_CODEX_MODEL_OPTIONS;
   private modelOptionsLoading = false;
   private customModelDraft = false;
+  private modelSelectEl: HTMLSelectElement | null = null;
+  private modelCustomInputEl: HTMLInputElement | null = null;
+  private modelActiveEl: HTMLElement | null = null;
+  private modelLoadingEl: HTMLElement | null = null;
   private isLoading = false;
   private currentAbortController: AbortController | null = null;
   private loadingStartedAt = 0;
@@ -75,6 +80,39 @@ export class BrainSidebarView extends ItemView {
     void this.refreshModelOptions();
     header.createEl("p", {
       text: "Ask your vault, or tell Brain what to file.",
+    });
+
+    const headerActions = header.createEl("div", { cls: "brain-header-actions" });
+    this.clearButtonEl = headerActions.createEl("button", {
+      cls: "brain-button brain-button-ghost brain-button-small",
+      attr: { "aria-label": "Clear conversation", title: "Clear conversation" },
+    });
+    setIcon(this.clearButtonEl, "trash-2");
+    this.clearButtonEl.createEl("span", { text: "Clear" });
+    this.clearButtonEl.addEventListener("click", () => {
+      void this.clearConversation();
+    });
+
+    const instructionsLink = headerActions.createEl("button", {
+      cls: "brain-button brain-button-ghost brain-button-small",
+      attr: { "aria-label": "Open instructions file", title: "Open instructions file" },
+    });
+    setIcon(instructionsLink, "book-open");
+    instructionsLink.createEl("span", { text: "Instructions" });
+    instructionsLink.addEventListener("click", () => {
+      void this.plugin.openInstructionsFile();
+    });
+
+    const settingsLink = headerActions.createEl("button", {
+      cls: "brain-button brain-button-ghost brain-button-small",
+      attr: { "aria-label": "Open Brain settings", title: "Open Brain settings" },
+    });
+    setIcon(settingsLink, "settings");
+    settingsLink.createEl("span", { text: "Settings" });
+    settingsLink.addEventListener("click", () => {
+      const commands = (this.app as unknown as { commands?: { executeCommandById?: (id: string) => void } })
+        .commands;
+      commands?.executeCommandById?.("app:open-settings");
     });
 
     const messagesContainer = this.contentEl.createEl("div", { cls: "brain-messages-container" });
@@ -121,6 +159,13 @@ export class BrainSidebarView extends ItemView {
       this.autoResizeInput();
     });
 
+    const hint = this.contentEl.createEl("div", { cls: "brain-keyboard-hint" });
+    hint.createEl("span", { text: "Press " });
+    hint.createEl("kbd", { text: "Enter" });
+    hint.createEl("span", { text: " to send · " });
+    hint.createEl("kbd", { text: "Shift+Enter" });
+    hint.createEl("span", { text: " for a new line" });
+
     const actions = this.contentEl.createEl("div", { cls: "brain-actions" });
     this.sendButtonEl = actions.createEl("button", {
       cls: "brain-button brain-button-primary brain-button-send",
@@ -139,6 +184,7 @@ export class BrainSidebarView extends ItemView {
     this.stopButtonEl.hidden = true;
 
     this.statusEl = this.contentEl.createEl("div", { cls: "brain-chat-status" });
+    this.updateClearButton();
     this.autoResizeInput();
     await this.refreshStatus();
   }
@@ -159,17 +205,24 @@ export class BrainSidebarView extends ItemView {
     }
     this.statusEl.empty();
     let statusText = "Not connected";
+    let statusClass: "ok" | "warn" | "error" = "error";
     try {
       const aiStatus = await getAIConfigurationStatus(this.plugin.settings);
       if (aiStatus.configured) {
-        statusText = aiStatus.model || "Connected";
+        statusText = aiStatus.model ? `Model: ${aiStatus.model}` : "Connected (account default model)";
+        statusClass = "ok";
+      } else {
+        statusText = aiStatus.message || "Not connected";
+        statusClass = "warn";
       }
     } catch (error) {
       console.error(error);
+      statusText = "Could not check Codex status";
+      statusClass = "error";
     }
 
     const indicator = this.statusEl.createEl("span", {
-      cls: `brain-status-indicator ${statusText !== "Not connected" ? "brain-status-indicator--ok" : "brain-status-indicator--warn"}`,
+      cls: `brain-status-indicator brain-status-indicator--${statusClass}`,
     });
     indicator.setAttribute("aria-hidden", "true");
     this.statusEl.createEl("span", { text: statusText });
@@ -198,10 +251,14 @@ export class BrainSidebarView extends ItemView {
     } catch (error) {
       if (isStoppedRequest(error)) {
         if (this.contentEl.isConnected) {
-          this.addTurn("brain", "Codex request stopped.");
+          this.addTurn("info", "Codex request stopped.");
         }
       } else {
+        const message = error instanceof Error ? error.message : "Could not chat with the vault";
         showError(error, "Could not chat with the vault");
+        if (this.contentEl.isConnected) {
+          this.addTurn("error", message);
+        }
       }
     } finally {
       this.currentAbortController = null;
@@ -211,32 +268,55 @@ export class BrainSidebarView extends ItemView {
 
   private buildChatHistory(): ChatExchange[] {
     // Exclude the last turn, which is the current user message being sent.
-    return this.turns
-      .slice(0, -1)
-      .filter((turn): turn is ChatTurn & { text: string } => Boolean(turn.text))
-      .map((turn) => ({
-        role: turn.role,
-        text: turn.text,
-      }));
+    const out: ChatExchange[] = [];
+    for (const turn of this.turns.slice(0, -1)) {
+      if (turn.role !== "user" && turn.role !== "brain") {
+        continue;
+      }
+      if (!turn.text) {
+        continue;
+      }
+      if (turn.updatedPaths?.length) {
+        continue;
+      }
+      out.push({ role: turn.role, text: turn.text });
+    }
+    return out;
   }
 
   private stopCurrentRequest(): void {
-    this.currentAbortController?.abort();
+    if (!this.currentAbortController) {
+      return;
+    }
+    this.currentAbortController.abort();
+    this.stopButtonEl.disabled = true;
+    if (this.loadingStageEl) {
+      this.loadingStageEl.setText("Stopping…");
+    }
+    if (this.loadingTextEl) {
+      this.loadingTextEl.setText("Stopping");
+    }
   }
 
   private renderModelSelector(): void {
     this.modelRowEl.empty();
+    this.modelSelectEl = null;
+    this.modelCustomInputEl = null;
+    this.modelActiveEl = null;
+    this.modelLoadingEl = null;
+
     if (this.modelOptionsLoading) {
-      this.modelRowEl.createEl("span", {
+      this.modelLoadingEl = this.modelRowEl.createEl("span", {
         cls: "brain-model-active",
         text: "Loading Codex models...",
       });
+      this.updateModelControlsDisabledState();
       return;
     }
     const select = this.modelRowEl.createEl("select", {
       cls: "brain-model-select",
-    });
-    select.disabled = this.isLoading;
+    }) as HTMLSelectElement;
+    this.modelSelectEl = select;
     for (const option of this.modelOptions) {
       select.createEl("option", {
         value: option.value,
@@ -247,16 +327,19 @@ export class BrainSidebarView extends ItemView {
       value: CUSTOM_CODEX_MODEL_VALUE,
       text: "Custom...",
     });
-    select.value = this.customModelDraft
+    const desiredValue = this.customModelDraft
       ? CUSTOM_CODEX_MODEL_VALUE
       : getCodexModelDropdownValue(this.plugin.settings.codexModel, this.modelOptions);
+    if (this.modelSelectEl.value !== desiredValue) {
+      this.modelSelectEl.value = desiredValue;
+    }
     select.addEventListener("change", () => {
       void this.handleModelSelection(select.value);
     });
 
     if (select.value === CUSTOM_CODEX_MODEL_VALUE) {
       if (this.customModelDraft && this.plugin.settings.codexModel.trim()) {
-        this.modelRowEl.createEl("span", {
+        this.modelActiveEl = this.modelRowEl.createEl("span", {
           cls: "brain-model-active",
           text: `Active: ${this.plugin.settings.codexModel.trim()}`,
         });
@@ -268,10 +351,14 @@ export class BrainSidebarView extends ItemView {
           placeholder: "Codex model id",
         },
       }) as HTMLInputElement;
-      input.disabled = this.isLoading;
-      input.value = this.customModelDraft || isKnownCodexModel(this.plugin.settings.codexModel, this.modelOptions)
-        ? ""
-        : this.plugin.settings.codexModel;
+      this.modelCustomInputEl = input;
+      const initialCustomValue =
+        this.customModelDraft || isKnownCodexModel(this.plugin.settings.codexModel, this.modelOptions)
+          ? ""
+          : this.plugin.settings.codexModel;
+      if (input.value !== initialCustomValue) {
+        input.value = initialCustomValue;
+      }
       input.addEventListener("blur", () => {
         void this.saveCustomModel(input.value);
       });
@@ -281,6 +368,17 @@ export class BrainSidebarView extends ItemView {
           input.blur();
         }
       });
+    }
+    this.updateModelControlsDisabledState();
+  }
+
+  private updateModelControlsDisabledState(): void {
+    const disabled = this.isLoading || this.modelOptionsLoading;
+    if (this.modelSelectEl) {
+      this.modelSelectEl.disabled = disabled;
+    }
+    if (this.modelCustomInputEl) {
+      this.modelCustomInputEl.disabled = disabled;
     }
   }
 
@@ -354,7 +452,8 @@ export class BrainSidebarView extends ItemView {
     this.inputEl.disabled = loading;
     this.sendButtonEl.hidden = loading;
     this.stopButtonEl.hidden = !loading;
-    this.renderModelSelector();
+    this.stopButtonEl.disabled = false;
+    this.updateModelControlsDisabledState();
   }
 
   private autoResizeInput(): void {
@@ -368,10 +467,11 @@ export class BrainSidebarView extends ItemView {
     });
   }
 
-  private addTurn(role: "user" | "brain", text: string, sources?: VaultQueryMatch[]): void {
+  private addTurn(role: ChatTurn["role"], text: string, sources?: VaultQueryMatch[]): void {
     const turn: ChatTurn = { role, text, sources };
     this.turns.push(turn);
     void this.appendTurnElement(turn);
+    this.updateClearButton();
   }
 
   private addUpdatedFileTurn(message: string, paths: string[]): void {
@@ -382,6 +482,32 @@ export class BrainSidebarView extends ItemView {
     };
     this.turns.push(turn);
     void this.appendTurnElement(turn);
+    this.updateClearButton();
+  }
+
+  private async clearConversation(): Promise<void> {
+    if (this.isLoading) {
+      new Notice("Stop the current request before clearing the conversation.");
+      return;
+    }
+    if (this.turns.length === 0) {
+      return;
+    }
+    this.turns = [];
+    this.userScrolledUp = false;
+    this.messagesEl.empty();
+    this.renderEmptyState();
+    this.updateScrollToBottomButton();
+    this.updateClearButton();
+  }
+
+  private updateClearButton(): void {
+    if (!this.clearButtonEl) {
+      return;
+    }
+    const disabled = this.turns.length === 0;
+    this.clearButtonEl.disabled = disabled;
+    this.clearButtonEl.toggleClass("brain-button-hidden", disabled);
   }
 
   private async appendTurnElement(turn: ChatTurn): Promise<void> {
@@ -399,8 +525,8 @@ export class BrainSidebarView extends ItemView {
     });
     const roleEl = item.createEl("div", { cls: "brain-chat-role" });
     const roleIcon = roleEl.createEl("span");
-    setIcon(roleIcon, turn.role === "user" ? "user" : "brain-circuit");
-    roleEl.createEl("span", { text: turn.role === "user" ? "You" : "Brain" });
+    setIcon(roleIcon, this.turnIconFor(turn.role));
+    roleEl.createEl("span", { text: this.turnLabelFor(turn.role) });
 
     const output = item.createEl("div", { cls: "brain-output" });
     if (turn.role === "brain") {
@@ -425,6 +551,36 @@ export class BrainSidebarView extends ItemView {
     }
 
     this.maybeScrollToBottom();
+  }
+
+  private turnLabelFor(role: ChatTurn["role"]): string {
+    switch (role) {
+      case "user":
+        return "You";
+      case "brain":
+        return "Brain";
+      case "error":
+        return "Error";
+      case "info":
+        return "Brain";
+      default:
+        return "Brain";
+    }
+  }
+
+  private turnIconFor(role: ChatTurn["role"]): string {
+    switch (role) {
+      case "user":
+        return "user";
+      case "brain":
+        return "brain-circuit";
+      case "error":
+        return "alert-triangle";
+      case "info":
+        return "info";
+      default:
+        return "brain-circuit";
+    }
   }
 
   private appendLoadingIndicator(): void {
@@ -481,8 +637,8 @@ export class BrainSidebarView extends ItemView {
       });
       const roleEl = item.createEl("div", { cls: "brain-chat-role" });
       const roleIcon = roleEl.createEl("span");
-      setIcon(roleIcon, turn.role === "user" ? "user" : "brain-circuit");
-      roleEl.createEl("span", { text: turn.role === "user" ? "You" : "Brain" });
+      setIcon(roleIcon, this.turnIconFor(turn.role));
+      roleEl.createEl("span", { text: this.turnLabelFor(turn.role) });
 
       const output = item.createEl("div", { cls: "brain-output" });
       if (turn.role === "brain") {

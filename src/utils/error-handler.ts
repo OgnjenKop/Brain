@@ -10,8 +10,3 @@ export function showError(error: unknown, defaultMessage: string): void {
   const message = error instanceof Error ? error.message : defaultMessage;
   new Notice(message);
 }
-
-export function showErrorAndRethrow(error: unknown, defaultMessage: string): never {
-  showError(error, defaultMessage);
-  throw error instanceof Error ? error : new Error(defaultMessage);
-}

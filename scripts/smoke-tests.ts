@@ -99,6 +99,7 @@ async function run(): Promise<void> {
     content: "Keep this",
     description: undefined,
   });
+  assert.equal(normalizedPlan.droppedOperations, 6);
   assert.deepEqual(normalizedPlan.questions, ["Confirm owner?"]);
 
   const queryVault = new FakeVaultService({
