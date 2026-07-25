@@ -3,14 +3,12 @@ import { getAIConfigurationStatus } from "../utils/ai-config";
 import { BrainAIService } from "./ai-service";
 import { InstructionService } from "./instruction-service";
 import { VaultQueryMatch, VaultQueryService } from "./vault-query-service";
-import { VaultService } from "./vault-service";
 import { VaultWritePlan, VaultWriteService } from "./vault-write-service";
 
 export interface VaultChatResponse {
   answer: string;
   sources: VaultQueryMatch[];
   plan: VaultWritePlan | null;
-  usedAI: boolean;
 }
 
 export interface ChatExchange {
@@ -18,7 +16,12 @@ export interface ChatExchange {
   text: string;
 }
 
-const CHAT_CONTEXT_LIMIT = 6;
+/**
+ * The source hints are the model's only view of the vault, so Brain sends a few
+ * more of them, and more of each, than it did when Codex could go read files
+ * for itself.
+ */
+const CHAT_CONTEXT_LIMIT = 8;
 const MAX_HISTORY_EXCHANGES = 6;
 const MAX_CONTEXT_EXCERPT_CHARS = 1200;
 
@@ -27,7 +30,6 @@ export class VaultChatService {
     private readonly aiService: BrainAIService,
     private readonly instructionService: InstructionService,
     private readonly queryService: VaultQueryService,
-    private readonly vaultService: VaultService,
     private readonly writeService: VaultWriteService,
     private readonly settingsProvider: () => BrainPluginSettings,
   ) {}
@@ -43,18 +45,25 @@ export class VaultChatService {
       throw new Error("Enter a message first");
     }
 
-    onStage?.("query");
-    const [instructions, sources] = await Promise.all([
-      this.instructionService.readInstructions(),
-      this.queryService.queryVault(trimmed),
-    ]);
-    const context = formatSourcesForPrompt(sources.slice(0, CHAT_CONTEXT_LIMIT));
+    // Checked before retrieval so an unconfigured Codex fails immediately
+    // instead of after a full vault scan.
     const settings = this.settingsProvider();
-    const vaultBasePath = this.vaultService.getBasePath();
     const aiStatus = await getAIConfigurationStatus(settings);
     if (!aiStatus.configured) {
       throw new Error(aiStatus.message);
     }
+
+    onStage?.("query");
+    // Retrieve exactly the sources that go into the prompt, so the sources the
+    // UI attributes the answer to are the ones the model actually saw.
+    const [instructions, sources] = await Promise.all([
+      this.instructionService.readInstructions(),
+      this.queryService.queryVault(trimmed, {
+        limit: CHAT_CONTEXT_LIMIT,
+        priorQuery: lastUserMessage(history),
+      }),
+    ]);
+    const context = formatSourcesForPrompt(sources);
 
     onStage?.("ai");
     const response = await this.aiService.completeChat(
@@ -65,11 +74,10 @@ export class VaultChatService {
         },
         {
           role: "user",
-          content: buildUserPrompt(trimmed, vaultBasePath, context, history),
+          content: buildUserPrompt(trimmed, context, history),
         },
       ],
       settings,
-      vaultBasePath,
       signal,
     );
     const parsed = parseChatResponse(response);
@@ -77,9 +85,22 @@ export class VaultChatService {
       answer: parsed.answer || "Codex returned no answer.",
       sources,
       plan: parsed.plan ? this.writeService.normalizePlan(parsed.plan) : null,
-      usedAI: true,
     };
   }
+}
+
+/**
+ * The most recent user message before this one. A follow-up like "when is the
+ * next review?" carries none of its own subject, so retrieval would otherwise
+ * lose the thread.
+ */
+function lastUserMessage(history: ChatExchange[]): string | undefined {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index].role === "user") {
+      return history[index].text;
+    }
+  }
+  return undefined;
 }
 
 function buildSystemPrompt(
@@ -88,9 +109,10 @@ function buildSystemPrompt(
 ): string {
   return [
     "You are Brain, an Obsidian vault assistant.",
-    "Answer directly from the Obsidian vault markdown.",
-    "You may inspect markdown files in the current working directory with read-only shell commands.",
-    "Never claim facts that are not supported by vault markdown or the provided source hints.",
+    "Answer from the source hints provided in the user message.",
+    "You have no shell and no filesystem access. The source hints are the only vault content available to you; there is nothing else to read.",
+    "Never claim facts that are not supported by the provided source hints.",
+    "If the hints do not answer the question, say so plainly and name what the user could search for or which note is likely to hold it. Do not guess, and do not describe files you were not shown.",
     "For simple questions, answer in one or two sentences.",
     "For filing requests, propose safe vault writes.",
     "Return only a JSON object.",
@@ -120,7 +142,6 @@ function buildSystemPrompt(
 
 function buildUserPrompt(
   message: string,
-  vaultBasePath: string | null,
   context: string,
   history: ChatExchange[],
 ): string {
@@ -142,13 +163,14 @@ function buildUserPrompt(
   parts.push(`User message: ${message}`);
   parts.push("");
   parts.push(
-    vaultBasePath
-      ? "You are running from the Obsidian vault root. Use read-only shell commands only if you need to inspect markdown files."
-      : "Use the relevant vault context below.",
+    "The source hints below are the complete vault context for this question. There is no other vault content available to you.",
   );
   parts.push("");
   parts.push("Relevant source hints:");
-  parts.push(context || "No matching vault files found.");
+  parts.push(
+    context
+      || "No matching vault files found. Say so, and suggest what the user could search for instead.",
+  );
 
   return parts.join("\n");
 }
@@ -165,48 +187,62 @@ function formatSourcesForPrompt(sources: VaultQueryMatch[]): string {
     .join("\n\n");
 }
 
-function parseChatResponse(response: string): {
+export function parseChatResponse(response: string): {
   answer: string;
-  plan: VaultWritePlan | null;
+  /** Raw, unvalidated plan payload. `VaultWriteService.normalizePlan` validates it. */
+  plan: Record<string, unknown> | null;
 } {
-  const jsonText = extractJson(response);
-  if (!jsonText) {
-    return {
-      answer: response.trim(),
-      plan: null,
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(jsonText) as {
-      answer?: unknown;
-      plan?: unknown;
-    };
+  for (const candidate of jsonCandidates(response)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (!isJsonObject(parsed)) {
+      continue;
+    }
     return {
       answer: typeof parsed.answer === "string" ? parsed.answer.trim() : "",
-      plan: isPlanObject(parsed.plan) ? parsed.plan : null,
-    };
-  } catch {
-    return {
-      answer: response.trim(),
-      plan: null,
+      plan: isJsonObject(parsed.plan) ? parsed.plan : null,
     };
   }
+  return {
+    answer: response.trim(),
+    plan: null,
+  };
 }
 
-function extractJson(text: string): string | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+/**
+ * Candidate JSON payloads, most trustworthy first.
+ *
+ * The whole response is tried before any fence, because Codex normally returns
+ * bare JSON whose `answer` contains markdown — often including a fenced code
+ * block. Matching an unanchored fence first would extract that inner block and
+ * lose both the answer and the write plan.
+ */
+function jsonCandidates(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const candidates = [trimmed];
+
+  const fenced = trimmed.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/i)?.[1];
   if (fenced) {
-    return fenced.trim();
+    candidates.push(fenced.trim());
   }
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    return null;
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    candidates.push(trimmed.slice(start, end + 1));
   }
-  return text.slice(start, end + 1);
+
+  return candidates;
 }
 
-function isPlanObject(value: unknown): value is VaultWritePlan {
+function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

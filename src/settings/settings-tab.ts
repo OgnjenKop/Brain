@@ -1,5 +1,9 @@
 import { App, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian";
 import BrainPlugin from "../../main";
+import {
+  MAX_CODEX_TIMEOUT_SECONDS,
+  MIN_CODEX_TIMEOUT_SECONDS,
+} from "./settings";
 import { getAIConfigurationStatus } from "../utils/ai-config";
 import {
   CUSTOM_CODEX_MODEL_VALUE,
@@ -39,6 +43,7 @@ export class BrainSettingTab extends PluginSettingTab {
     this.renderCodexSetupSection(containerEl);
     this.renderStatusSection(containerEl);
     this.renderModelSection(containerEl);
+    this.renderTimeoutSection(containerEl);
 
     if (!this.modelOptionsLoading && !this.modelOptionsLoaded) {
       void this.refreshModelOptions();
@@ -131,6 +136,7 @@ export class BrainSettingTab extends PluginSettingTab {
             this.statusSetting?.setDesc("Rechecking Codex CLI status...");
             await this.refreshCodexStatus(this.statusSetting, true);
             this.updateModelControlsState();
+            void this.refreshModelOptions();
           }),
       );
   }
@@ -212,6 +218,41 @@ export class BrainSettingTab extends PluginSettingTab {
     this.updateModelControlsState();
   }
 
+  private renderTimeoutSection(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Codex timeout")
+      .setDesc(
+        `How long to wait for a Codex reply before giving up, in seconds (${MIN_CODEX_TIMEOUT_SECONDS}-${MAX_CODEX_TIMEOUT_SECONDS}). Raise this if you use a slower reasoning model.`,
+      )
+      .addText((text) => {
+        text.inputEl.type = "number";
+        text.inputEl.min = String(MIN_CODEX_TIMEOUT_SECONDS);
+        text.inputEl.max = String(MAX_CODEX_TIMEOUT_SECONDS);
+        text.setValue(String(this.plugin.settings.codexTimeoutSeconds));
+
+        const commit = () => {
+          const parsed = Number(text.inputEl.value);
+          const next = Number.isFinite(parsed)
+            ? Math.min(
+                MAX_CODEX_TIMEOUT_SECONDS,
+                Math.max(MIN_CODEX_TIMEOUT_SECONDS, Math.round(parsed)),
+              )
+            : this.plugin.settings.codexTimeoutSeconds;
+          this.plugin.settings.codexTimeoutSeconds = next;
+          text.setValue(String(next));
+          void this.plugin.saveSettings();
+        };
+
+        text.inputEl.addEventListener("blur", commit);
+        text.inputEl.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            text.inputEl.blur();
+          }
+        });
+      });
+  }
+
   private updateModelControlsState(): void {
     if (!this.modelSectionEl) {
       return;
@@ -283,7 +324,9 @@ export class BrainSettingTab extends PluginSettingTab {
       setting.setDesc("Rechecking Codex CLI status...");
     }
     try {
-      const status = await getAIConfigurationStatus(this.plugin.settings);
+      // `force` bypasses the short-lived Codex lookup cache, which is the point
+      // of the Recheck button.
+      const status = await getAIConfigurationStatus(this.plugin.settings, { force });
       setting.setDesc(status.message);
     } catch (error) {
       console.error(error);

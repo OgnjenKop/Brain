@@ -24,7 +24,6 @@ export default class BrainPlugin extends Plugin {
   vaultQueryService!: VaultQueryService;
   vaultWriteService!: VaultWriteService;
   vaultChatService!: VaultChatService;
-  private sidebarView: BrainSidebarView | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -48,16 +47,11 @@ export default class BrainPlugin extends Plugin {
       this.aiService,
       this.instructionService,
       this.vaultQueryService,
-      this.vaultService,
       this.vaultWriteService,
       () => this.settings,
     );
 
-    this.registerView(BRAIN_VIEW_TYPE, (leaf) => {
-      const view = new BrainSidebarView(leaf, this);
-      this.sidebarView = view;
-      return view;
-    });
+    this.registerView(BRAIN_VIEW_TYPE, (leaf) => new BrainSidebarView(leaf, this));
 
     registerCommands(this);
 
@@ -69,10 +63,6 @@ export default class BrainPlugin extends Plugin {
     } catch (error) {
       showError(error, "Could not initialize Brain storage");
     }
-  }
-
-  onunload(): void {
-    this.sidebarView = null;
   }
 
   async loadSettings(): Promise<void> {
@@ -98,6 +88,14 @@ export default class BrainPlugin extends Plugin {
   }
 
   async openSidebar(): Promise<void> {
+    // Reuse an open Brain view instead of creating a second one, which would
+    // also leave refreshSidebarStatus updating whichever leaf came first.
+    const existing = this.app.workspace.getLeavesOfType(BRAIN_VIEW_TYPE)[0];
+    if (existing) {
+      this.app.workspace.revealLeaf(existing);
+      return;
+    }
+
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) {
       new Notice("Unable to open the sidebar");

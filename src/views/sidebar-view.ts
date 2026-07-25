@@ -2,6 +2,7 @@ import { App, ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon 
 import BrainPlugin from "../../main";
 import { VaultChatResponse, ChatExchange } from "../services/vault-chat-service";
 import type { VaultQueryMatch } from "../services/vault-query-service";
+import type { VaultWritePlan } from "../services/vault-write-service";
 import { VaultPlanModal } from "./vault-plan-modal";
 import { showError } from "../utils/error-handler";
 import { getAIConfigurationStatus } from "../utils/ai-config";
@@ -18,6 +19,8 @@ interface ChatTurn {
   role: "user" | "brain" | "error" | "info";
   text: string;
   sources?: VaultQueryMatch[];
+  /** Proposed writes, kept until applied so a cancelled review can be reopened. */
+  plan?: VaultWritePlan;
   updatedPaths?: string[];
 }
 
@@ -36,19 +39,18 @@ export class BrainSidebarView extends ItemView {
   private customModelDraft = false;
   private modelSelectEl: HTMLSelectElement | null = null;
   private modelCustomInputEl: HTMLInputElement | null = null;
-  private modelActiveEl: HTMLElement | null = null;
-  private modelLoadingEl: HTMLElement | null = null;
   private isLoading = false;
   private currentAbortController: AbortController | null = null;
   private loadingStartedAt = 0;
   private loadingTimer: number | null = null;
-  private loadingText = "";
   private loadingTextEl: HTMLElement | null = null;
   private loadingStageEl: HTMLElement | null = null;
   private loadingStage: "query" | "ai" = "query";
   private renderGeneration = 0;
   private resizeFrameId: number | null = null;
   private turns: ChatTurn[] = [];
+  /** Latest rendered element for a turn, so a turn can be updated in place. */
+  private readonly turnElements = new WeakMap<ChatTurn, HTMLElement>();
   private userScrolledUp = false;
   private scrollToBottomEl: HTMLElement | null = null;
 
@@ -237,7 +239,7 @@ export class BrainSidebarView extends ItemView {
     this.inputEl.value = "";
     this.autoResizeInput();
     this.userScrolledUp = false;
-    this.addTurn("user", message);
+    this.addTurn({ role: "user", text: message });
     this.setLoading(true, "query");
     const controller = new AbortController();
     this.currentAbortController = controller;
@@ -251,13 +253,13 @@ export class BrainSidebarView extends ItemView {
     } catch (error) {
       if (isStoppedRequest(error)) {
         if (this.contentEl.isConnected) {
-          this.addTurn("info", "Codex request stopped.");
+          this.addTurn({ role: "info", text: "Codex request stopped." });
         }
       } else {
         const message = error instanceof Error ? error.message : "Could not chat with the vault";
         showError(error, "Could not chat with the vault");
         if (this.contentEl.isConnected) {
-          this.addTurn("error", message);
+          this.addTurn({ role: "error", text: message });
         }
       }
     } finally {
@@ -302,11 +304,9 @@ export class BrainSidebarView extends ItemView {
     this.modelRowEl.empty();
     this.modelSelectEl = null;
     this.modelCustomInputEl = null;
-    this.modelActiveEl = null;
-    this.modelLoadingEl = null;
 
     if (this.modelOptionsLoading) {
-      this.modelLoadingEl = this.modelRowEl.createEl("span", {
+      this.modelRowEl.createEl("span", {
         cls: "brain-model-active",
         text: "Loading Codex models...",
       });
@@ -339,7 +339,7 @@ export class BrainSidebarView extends ItemView {
 
     if (select.value === CUSTOM_CODEX_MODEL_VALUE) {
       if (this.customModelDraft && this.plugin.settings.codexModel.trim()) {
-        this.modelActiveEl = this.modelRowEl.createEl("span", {
+        this.modelRowEl.createEl("span", {
           cls: "brain-model-active",
           text: `Active: ${this.plugin.settings.codexModel.trim()}`,
         });
@@ -401,9 +401,9 @@ export class BrainSidebarView extends ItemView {
     }
     this.customModelDraft = false;
     this.plugin.settings.codexModel = value;
+    // saveSettings already refreshes this view's status.
     await this.plugin.saveSettings();
     this.renderModelSelector();
-    await this.refreshStatus();
   }
 
   private async saveCustomModel(value: string): Promise<void> {
@@ -417,23 +417,47 @@ export class BrainSidebarView extends ItemView {
     this.plugin.settings.codexModel = model;
     await this.plugin.saveSettings();
     this.renderModelSelector();
-    await this.refreshStatus();
   }
 
   private renderResponse(response: VaultChatResponse): void {
-    this.addTurn("brain", response.answer.trim(), response.sources);
+    const plan = response.plan && response.plan.operations.length > 0
+      ? response.plan
+      : undefined;
+    const turn = this.addTurn({
+      role: "brain",
+      text: response.answer.trim(),
+      sources: response.sources,
+      plan,
+    });
 
-    if (response.plan && response.plan.operations.length > 0) {
-      new VaultPlanModal(this.app, {
-        plan: response.plan,
-        settings: this.plugin.settings,
-        onApprove: async (plan) => this.plugin.applyVaultWritePlan(plan),
-        onComplete: async (message, paths) => {
-          this.addUpdatedFileTurn(message, paths);
-          await this.refreshStatus();
-        },
-      }).open();
+    if (plan) {
+      this.openPlanModal(turn);
     }
+  }
+
+  /**
+   * Opens the write review for a turn. The plan stays on the turn until it is
+   * applied, so cancelling the modal to go check something does not throw the
+   * proposal away — the message keeps a button to reopen it.
+   */
+  private openPlanModal(turn: ChatTurn): void {
+    const plan = turn.plan;
+    if (!plan || plan.operations.length === 0) {
+      return;
+    }
+    new VaultPlanModal(this.app, {
+      plan,
+      settings: this.plugin.settings,
+      onApprove: async (approved) => this.plugin.applyVaultWritePlan(approved),
+      onComplete: async (message, paths) => {
+        // The plan has been applied, so retire the reopen affordance rather
+        // than re-rendering the whole conversation.
+        turn.plan = undefined;
+        this.turnElements.get(turn)?.querySelector(".brain-plan-action")?.remove();
+        this.addTurn({ role: "brain", text: message, updatedPaths: paths });
+        await this.refreshStatus();
+      },
+    }).open();
   }
 
   private setLoading(loading: boolean, stage: "query" | "ai" = "query"): void {
@@ -446,7 +470,6 @@ export class BrainSidebarView extends ItemView {
       this.appendLoadingIndicator();
     } else {
       this.stopLoadingTimer();
-      this.loadingText = "";
       this.removeLoadingIndicator();
     }
     this.inputEl.disabled = loading;
@@ -467,22 +490,11 @@ export class BrainSidebarView extends ItemView {
     });
   }
 
-  private addTurn(role: ChatTurn["role"], text: string, sources?: VaultQueryMatch[]): void {
-    const turn: ChatTurn = { role, text, sources };
+  private addTurn(turn: ChatTurn): ChatTurn {
     this.turns.push(turn);
     void this.appendTurnElement(turn);
     this.updateClearButton();
-  }
-
-  private addUpdatedFileTurn(message: string, paths: string[]): void {
-    const turn: ChatTurn = {
-      role: "brain",
-      text: message,
-      updatedPaths: paths,
-    };
-    this.turns.push(turn);
-    void this.appendTurnElement(turn);
-    this.updateClearButton();
+    return turn;
   }
 
   private async clearConversation(): Promise<void> {
@@ -511,46 +523,70 @@ export class BrainSidebarView extends ItemView {
   }
 
   private async appendTurnElement(turn: ChatTurn): Promise<void> {
-    const generation = ++this.renderGeneration;
-
     const emptyEl = this.messagesEl.querySelector(".brain-chat-empty");
     if (emptyEl) {
       emptyEl.remove();
     }
 
     this.removeLoadingIndicator();
+    await this.renderTurn(turn);
+    this.maybeScrollToBottom();
+  }
 
+  /** Single definition of a turn's DOM, shared by appends and full re-renders. */
+  private async renderTurn(turn: ChatTurn): Promise<void> {
     const item = this.messagesEl.createEl("div", {
       cls: `brain-chat-message brain-chat-message-${turn.role}`,
     });
+    this.turnElements.set(turn, item);
     const roleEl = item.createEl("div", { cls: "brain-chat-role" });
     const roleIcon = roleEl.createEl("span");
     setIcon(roleIcon, this.turnIconFor(turn.role));
     roleEl.createEl("span", { text: this.turnLabelFor(turn.role) });
 
     const output = item.createEl("div", { cls: "brain-output" });
-    if (turn.role === "brain") {
-      try {
-        await MarkdownRenderer.render(this.app, turn.text, output, "", this);
-      } catch {
-        output.setText(turn.text);
-      }
-      if (generation !== this.renderGeneration) {
-        item.remove();
-        return;
-      }
-      this.addCopyButtons(output);
-    } else {
+    if (turn.role !== "brain") {
       output.setText(turn.text);
-    }
-    if (turn.role === "brain" && turn.sources?.length) {
-      this.renderSources(item, turn.sources);
-    }
-    if (turn.role === "brain" && turn.updatedPaths?.length) {
-      this.renderUpdatedFiles(item, turn.updatedPaths);
+      return;
     }
 
-    this.maybeScrollToBottom();
+    try {
+      await MarkdownRenderer.render(this.app, turn.text, output, "", this);
+    } catch {
+      output.setText(turn.text);
+    }
+    // Only bail if this element was detached while markdown was rendering
+    // (a full re-render or a cleared conversation). A later append must not
+    // remove an earlier, still-attached message.
+    if (item.parentElement !== this.messagesEl) {
+      return;
+    }
+    this.addCopyButtons(output);
+
+    if (turn.sources?.length) {
+      this.renderSources(item, turn.sources);
+    }
+    if (turn.plan?.operations.length) {
+      this.renderPlanAction(item, turn);
+    }
+    if (turn.updatedPaths?.length) {
+      this.renderUpdatedFiles(item, turn.updatedPaths);
+    }
+  }
+
+  private renderPlanAction(container: HTMLElement, turn: ChatTurn): void {
+    const count = turn.plan?.operations.length ?? 0;
+    const row = container.createEl("div", { cls: "brain-plan-action" });
+    const button = row.createEl("button", {
+      cls: "brain-button brain-button-primary brain-button-small",
+    });
+    setIcon(button, "file-pen");
+    button.createEl("span", {
+      text: `Review ${count} proposed change${count === 1 ? "" : "s"}`,
+    });
+    button.addEventListener("click", () => {
+      this.openPlanModal(turn);
+    });
   }
 
   private turnLabelFor(role: ChatTurn["role"]): string {
@@ -632,34 +668,7 @@ export class BrainSidebarView extends ItemView {
       if (generation !== this.renderGeneration) {
         return;
       }
-      const item = this.messagesEl.createEl("div", {
-        cls: `brain-chat-message brain-chat-message-${turn.role}`,
-      });
-      const roleEl = item.createEl("div", { cls: "brain-chat-role" });
-      const roleIcon = roleEl.createEl("span");
-      setIcon(roleIcon, this.turnIconFor(turn.role));
-      roleEl.createEl("span", { text: this.turnLabelFor(turn.role) });
-
-      const output = item.createEl("div", { cls: "brain-output" });
-      if (turn.role === "brain") {
-        try {
-          await MarkdownRenderer.render(this.app, turn.text, output, "", this);
-        } catch {
-          output.setText(turn.text);
-        }
-        if (generation !== this.renderGeneration) {
-          return;
-        }
-        this.addCopyButtons(output);
-      } else {
-        output.setText(turn.text);
-      }
-      if (turn.role === "brain" && turn.sources?.length) {
-        this.renderSources(item, turn.sources);
-      }
-      if (turn.role === "brain" && turn.updatedPaths?.length) {
-        this.renderUpdatedFiles(item, turn.updatedPaths);
-      }
+      await this.renderTurn(turn);
     }
     if (this.isLoading) {
       this.appendLoadingIndicator();
@@ -684,9 +693,8 @@ export class BrainSidebarView extends ItemView {
   private updateLoadingText(): void {
     const seconds = Math.max(0, Math.floor((Date.now() - this.loadingStartedAt) / 1000));
     const stageLabel = this.loadingStage === "query" ? "Searching vault" : "Asking Codex";
-    this.loadingText = `${stageLabel} · ${seconds}s`;
     if (this.loadingTextEl) {
-      this.loadingTextEl.setText(this.loadingText);
+      this.loadingTextEl.setText(`${stageLabel} · ${seconds}s`);
     }
     if (this.loadingStageEl) {
       this.loadingStageEl.setText(this.loadingStage === "query" ? "Searching vault…" : "Asking Codex…");
@@ -704,11 +712,13 @@ export class BrainSidebarView extends ItemView {
   }
 
   private renderSources(container: HTMLElement, sources: VaultQueryMatch[]): void {
+    // Every source here was included in the prompt, so the count is an honest
+    // description of what backed the answer.
     const details = container.createEl("details", { cls: "brain-sources" });
     details.createEl("summary", {
-      text: `Sources (${Math.min(sources.length, 8)})`,
+      text: `Sources (${sources.length})`,
     });
-    for (const source of sources.slice(0, 8)) {
+    for (const source of sources) {
       const sourceEl = details.createEl("div", { cls: "brain-source" });
       const title = sourceEl.createEl("button", {
         cls: "brain-source-title",

@@ -2,8 +2,6 @@ import { BrainPluginSettings } from "../settings/settings";
 import { getCodexBinaryPath } from "../utils/codex-auth";
 import { getCodexRuntime, isAbortError, isEnoentError, isTimeoutError } from "../utils/node-runtime";
 
-const CODEX_CHAT_TIMEOUT_MS = 120000;
-
 interface ExecResult {
   stdout: string;
   stderr: string;
@@ -13,16 +11,14 @@ export class BrainAIService {
   async completeChat(
     messages: Array<{ role: "system" | "user"; content: string }>,
     settings: BrainPluginSettings,
-    workingDirectory: string | null,
     signal?: AbortSignal,
   ): Promise<string> {
-    return this.postCodexCompletion(settings, messages, workingDirectory, signal);
+    return this.postCodexCompletion(settings, messages, signal);
   }
 
   private async postCodexCompletion(
     settings: BrainPluginSettings,
     messages: Array<{ role: "system" | "user"; content: string }>,
-    workingDirectory: string | null,
     signal?: AbortSignal,
   ): Promise<string> {
     const { execFile, fs, os, path } = getCodexRuntime();
@@ -32,6 +28,10 @@ export class BrainAIService {
       throw new Error("Codex CLI is not installed. Install `@openai/codex` and run `codex login` first.");
     }
 
+    // Codex runs in an empty temp directory, never the vault. Brain assembles
+    // the context itself, so the model has nothing to explore — which is what
+    // makes the Sources list a complete account of what backed an answer, and
+    // what makes "Excluded folders" mean something.
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "brain-codex-"));
     const outputFile = path.join(tempDir, "response.txt");
     const args = [
@@ -44,10 +44,6 @@ export class BrainAIService {
       "--output-last-message",
       outputFile,
     ];
-
-    if (workingDirectory) {
-      args.push("--cd", workingDirectory);
-    }
 
     if (settings.codexModel.trim()) {
       args.push("--model", settings.codexModel.trim());
@@ -62,7 +58,7 @@ export class BrainAIService {
       execResult = await execFileWithAbort(codexBinary, args, {
         maxBuffer: 1024 * 1024 * 4,
         cwd: tempDir,
-        timeout: CODEX_CHAT_TIMEOUT_MS,
+        timeout: settings.codexTimeoutSeconds * 1000,
         signal,
         stdin: prompt,
       }, execFile);
@@ -90,8 +86,8 @@ export class BrainAIService {
       }
       if (isTimeoutError(error)) {
         throw new Error(
-          "Codex did not respond in time. Try again, or check `codex login status` outside Brain. " +
-          "If Codex requires approval for shell commands, configure it for non-interactive use.",
+          `Codex did not respond within ${settings.codexTimeoutSeconds}s. Raise "Codex timeout" in Brain settings, ` +
+          "or check `codex login status` outside Brain.",
         );
       }
       if (isEnoentError(error)) {
@@ -141,6 +137,7 @@ function execFileWithAbort(
 ): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let killTimer: number | null = null;
     const { signal, stdin, ...execOptions } = options;
     const child = execFile(file, args, execOptions, (error, stdout, stderr) => {
       if (settled) {
@@ -148,6 +145,10 @@ function execFileWithAbort(
       }
       settled = true;
       signal?.removeEventListener("abort", abort);
+      if (killTimer !== null) {
+        window.clearTimeout(killTimer);
+        killTimer = null;
+      }
       if (error) {
         const enriched = enrichError(error, stdout, stderr);
         reject(enriched);
@@ -158,8 +159,14 @@ function execFileWithAbort(
         });
       }
     });
-    if (stdin !== undefined) {
-      child.stdin?.end(stdin);
+
+    if (stdin !== undefined && child.stdin) {
+      // Codex can exit before it reads stdin — an unsupported CLI flag makes it
+      // bail immediately — which surfaces as EPIPE on this stream. Without a
+      // listener that becomes an uncaught exception in Obsidian's renderer, so
+      // swallow it here and let the exec callback report the real failure.
+      child.stdin.on("error", () => undefined);
+      child.stdin.end(stdin);
     }
 
     const abort = () => {
@@ -167,7 +174,8 @@ function execFileWithAbort(
         return;
       }
       child.kill("SIGTERM");
-      window.setTimeout(() => {
+      killTimer = window.setTimeout(() => {
+        killTimer = null;
         if (child.exitCode === null && child.signalCode === null) {
           child.kill("SIGKILL");
         }

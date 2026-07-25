@@ -1,6 +1,6 @@
 import {
   App,
-  FileSystemAdapter,
+  CachedMetadata,
   TFile,
   TFolder,
   normalizePath,
@@ -62,6 +62,15 @@ export class VaultService {
     return this.app.vault.read(file);
   }
 
+  /**
+   * Reads a file Brain already holds a handle to. Uses `cachedRead`, which is
+   * the API meant for read-only scanning, and skips the path lookup that
+   * `readText` has to do.
+   */
+  async readFileText(file: TFile): Promise<string> {
+    return this.app.vault.cachedRead(file);
+  }
+
   async appendText(filePath: string, content: string): Promise<TFile> {
     const file = await this.ensureFile(filePath);
     const current = await this.app.vault.read(file);
@@ -108,10 +117,13 @@ export class VaultService {
     return this.app.vault.getMarkdownFiles();
   }
 
-  getBasePath(): string | null {
-    return this.app.vault.adapter instanceof FileSystemAdapter
-      ? this.app.vault.adapter.getBasePath()
-      : null;
+  /**
+   * Obsidian's parsed headings, tags, links, and frontmatter for a file. Reads
+   * from the metadata cache, so it costs no file I/O. Null when the file has
+   * not been indexed yet.
+   */
+  getFileMetadata(file: TFile): CachedMetadata | null {
+    return this.app.metadataCache.getFileCache(file);
   }
 
   private async createFolderIfMissing(folderPath: string): Promise<void> {

@@ -159,7 +159,7 @@ export class VaultPlanModal extends Modal {
         this.selectedOperations.delete(index);
       }
     });
-    header.createEl("span", { text: describeOperation(operation) });
+    const headerLabel = header.createEl("span", { text: describeOperation(operation) });
 
     if (operation.description) {
       item.createEl("div", {
@@ -177,10 +177,13 @@ export class VaultPlanModal extends Modal {
     }) as HTMLInputElement;
     pathInput.value = operation.path;
     pathInput.addEventListener("input", () => {
-      this.draftOperations[index] = {
+      const updated = {
         ...this.draftOperations[index],
         path: pathInput.value,
       } as VaultWriteOperation;
+      this.draftOperations[index] = updated;
+      // Keep the "Append to X" / "Create X" label in step with the edited path.
+      headerLabel.setText(describeOperation(updated));
     });
 
     const textarea = item.createEl("textarea", {

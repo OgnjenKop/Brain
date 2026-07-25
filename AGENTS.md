@@ -21,7 +21,7 @@ Stay within the current product shape:
 - an editable `Brain/AGENTS.md` operating instructions file inside the vault
 - safe markdown writes (`append` and `create` only) with per-operation approval
 - question answering over explicit vault context plus a compact source-hint summary
-- AI backed by the local Codex CLI only
+- AI backed by the local Codex CLI only, with no vault access of its own
 
 Do not add:
 
@@ -81,7 +81,9 @@ If you change runtime behavior, run all three. If you only touch docs, run at le
 - All persisted user content must stay in normal markdown files in the vault.
 - Generated content should be clear and reusable markdown, not opaque machine output.
 - Vault-wide context must continue to exclude the configured instructions file and the folders listed in **Excluded folders**. The default list covers `.obsidian` and `node_modules`, which is what keeps plugin internals out of retrieval; the query path does not auto-exclude every dot-folder, so add any other sensitive folder explicitly.
-- The only write operations Brain may propose are `append` to an existing markdown file and `create` of a new markdown file. Plans that target the instructions file, dot-folders, paths containing `..`, or non-markdown paths must be rejected at the boundary in `isSafeMarkdownPath`.
+- **Retrieval is the only path from the vault to the model.** Codex is launched from an empty temp directory, never the vault, so the source hints Brain assembles are the complete context. Do not add `--cd`, a vault working directory, or any other affordance that lets the model read files Brain did not choose — it would silently break both the **Excluded folders** guarantee and the claim that the **Sources** list accounts for every answer.
+- The only write operations Brain may propose are `append` to an existing markdown file and `create` of a new markdown file. Plans that target the instructions file, dot-folders, paths with a `..` segment, or non-markdown paths must be rejected at the boundary in `isSafeMarkdownPath`.
+- Vault paths are compared case-insensitively (`samePath` in `src/utils/path-safety.ts`) because Brain runs on case-insensitive filesystems. Never compare vault paths with `===`.
 
 ## Public-Facing Changes
 

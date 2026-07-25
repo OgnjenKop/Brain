@@ -2,13 +2,18 @@ export interface BrainPluginSettings {
   notesFolder: string;
   instructionsFile: string;
   codexModel: string;
+  codexTimeoutSeconds: number;
   excludeFolders: string;
 }
+
+export const MIN_CODEX_TIMEOUT_SECONDS = 15;
+export const MAX_CODEX_TIMEOUT_SECONDS = 900;
 
 export const DEFAULT_BRAIN_SETTINGS: BrainPluginSettings = {
   notesFolder: "Notes",
   instructionsFile: "Brain/AGENTS.md",
   codexModel: "",
+  codexTimeoutSeconds: 120,
   excludeFolders: ".obsidian\nnode_modules",
 };
 
@@ -30,8 +35,20 @@ export function normalizeBrainSettings(
       DEFAULT_BRAIN_SETTINGS.instructionsFile,
     ),
     codexModel: typeof merged.codexModel === "string" ? merged.codexModel.trim() : "",
+    codexTimeoutSeconds: normalizeTimeoutSeconds(merged.codexTimeoutSeconds),
     excludeFolders: normalizeExcludeFolders(merged.excludeFolders),
   };
+}
+
+function normalizeTimeoutSeconds(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_BRAIN_SETTINGS.codexTimeoutSeconds;
+  }
+  return Math.min(
+    MAX_CODEX_TIMEOUT_SECONDS,
+    Math.max(MIN_CODEX_TIMEOUT_SECONDS, Math.round(numeric)),
+  );
 }
 
 function normalizeRelativePath(value: unknown, fallback: string): string {

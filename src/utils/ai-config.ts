@@ -10,8 +10,9 @@ export interface AIConfigurationStatus {
 
 export async function getAIConfigurationStatus(
   settings: BrainPluginSettings,
+  options?: { force?: boolean },
 ): Promise<AIConfigurationStatus> {
-  const codexStatus = await getCodexLoginStatus();
+  const codexStatus = await getCodexLoginStatus(options);
   if (codexStatus === "unavailable") {
     return {
       configured: false,

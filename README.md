@@ -110,7 +110,7 @@ If you change the plugin id, the installed folder name, or the `manifest.json` i
 2. Make sure the status indicator in the sidebar header is green. If it is amber, open **Settings → Brain** and run **Open Codex Setup** or **Recheck Status**.
 3. Type a question about your vault, for example: *What do I know about Alpha pricing?*
 4. Read the answer, expand the **Sources** section to verify the evidence, and follow up naturally.
-5. When you ask Brain to file something, a **Review Vault Changes** modal appears with each path and content editable. Untick any operation you do not want, tweak the path or text, then **Approve and Write**.
+5. When you ask Brain to file something, a **Review Vault Changes** modal appears with each path and content editable. Untick any operation you do not want, tweak the path or text, then **Approve and Write**. Cancelling is safe: the proposal stays on the message behind a **Review N proposed changes** button, so you can go check a note and come back to it.
 
 ## How It Works
 
@@ -118,15 +118,18 @@ If you change the plugin id, the installed folder name, or the `manifest.json` i
 User message
     │
     ▼
-Vault query (tokenize → score files → rank by relevance + recency)
+Vault query (tokenize current + previous question → score files → rank)
+    │   pass 1: path + metadata cache, no file reads, whole vault
+    │   pass 2: file contents, in priority order, budget-capped
     │   excludes: instructions file, configured excluded folders
     ▼
 Codex prompt: system instructions + vault context + conversation history + user message
-    │   Codex runs in a read-only sandbox, launched from the vault root
+    │   Codex runs in a read-only sandbox from an empty temp directory —
+    │   it has no access to the vault beyond the context above
     ▼
 Parse JSON response: answer + optional write plan
-    │   plan operations are normalized: paths must end in .md, no "..",
-    │   no dot-folder targets, no targeting of the instructions file
+    │   plan operations are normalized: paths must end in .md, no ".." segment,
+    │   no dot-folder targets, no targeting of the instructions file (any case)
     │   rejected operations are tracked as droppedOperations and skipped
     ▼
 If plan exists → preview modal → user approves per operation → safe markdown writes
@@ -142,7 +145,13 @@ Your vault is the source of truth. Brain never creates hidden files, databases, 
 
 ### Source-Backed Answers
 
-Brain scores every markdown file by relevance (exact phrase, title, heading, tag, wiki-link, content match, recency) and includes the top matches as expandable sources in every answer.
+Brain scores every markdown file by relevance (exact phrase, title, heading, tag, wiki-link, content match, recency) and includes the top matches as expandable sources in every answer. The **Sources** list is exactly the set of files sent to Codex, so it never credits a file the model did not see.
+
+Retrieval runs in two passes. The first pass scores every file in the vault from its path and Obsidian's metadata cache (headings, tags, links, aliases) and needs no file reads. The second pass reads file contents in that priority order, up to 1000 files per query. Vaults under 1000 markdown files are always scanned in full; above that, the files left unread are the ones with no path, heading, tag, link, or alias match and the oldest modification times.
+
+### Follow-Ups Keep The Thread
+
+A question like *"when is the next review?"* names no subject. Brain adds the terms from your previous question to the search at a reduced weight, so the follow-up retrieves notes about what you were just discussing without letting the old subject outrank what you actually asked. Sources retrieved this way say so — *content mentions "alpha" (from your previous question)*.
 
 ### Safe Writes Only
 
@@ -176,12 +185,13 @@ It cannot delete, overwrite, or target non-markdown files. Plans targeting `Brai
 | --- | --- | --- |
 | **Notes folder** | Default folder for new notes created from approved write plans. Brain uses this when its answer says "create" but does not specify a path. | `Notes` |
 | **Instructions file** | Markdown file that guides Brain's behavior in this vault. Created automatically on first load. | `Brain/AGENTS.md` |
-| **Excluded folders** | One folder path per line. Brain skips markdown files inside these folders when searching the vault. The default list already covers `.obsidian` and `node_modules`, so plugin internals stay out of retrieval by default. | `.obsidian`<br>`node_modules` |
+| **Excluded folders** | One folder path per line. Brain never reads markdown inside these folders and never sends it to Codex. The default list covers `.obsidian` and `node_modules`. | `.obsidian`<br>`node_modules` |
 | **Codex model** | Optional model override. Leave blank to use the account default reported by the Codex CLI. The dropdown is populated from `codex debug models`. | *(blank)* |
-| **Codex status** | Live read of the Codex CLI login state. | — |
+| **Codex timeout** | Seconds to wait for a Codex reply before giving up (15–900). Raise it if you use a slower reasoning model. | `120` |
+| **Codex status** | Live read of the Codex CLI login state. Cached for 30 seconds; **Recheck Status** forces a fresh check. | — |
 | **Codex setup** | Buttons to open the Codex setup page and to recheck login status. | — |
 
-The **Codex status**, **Codex setup**, and **Codex model** controls live under the **Codex CLI** section of the Brain settings tab.
+The **Codex status**, **Codex setup**, **Codex model**, and **Codex timeout** controls live under the **Codex CLI** section of the Brain settings tab.
 
 ## Commands
 
@@ -196,7 +206,9 @@ The **Codex status**, **Codex setup**, and **Codex model** controls live under t
 - **No embeddings, vector databases, or hosted services.** Retrieval reads your markdown files directly.
 - **Codex requests are only made when you send a chat message.** Idle, settings changes, and history browsing do not trigger any AI call.
 - **Authentication is delegated to the local Codex CLI** (`codex login`). Brain never receives or stores an API key.
-- **Writes are gated by `isSafeMarkdownPath`.** Paths that are non-markdown, contain `..`, target a dot-folder, or target the instructions file are rejected before reaching the vault.
+- **Writes are gated by `isSafeMarkdownPath`.** Paths that are non-markdown, contain a `..` segment, target a dot-folder, or target the instructions file are rejected before reaching the vault. The instructions-file check is case-insensitive, so `brain/agents.md` is rejected the same as `Brain/AGENTS.md`.
+- **Codex never sees your vault directly.** It is launched from an empty temporary directory with `--sandbox read-only`, and is told it has no filesystem access. The only vault content that reaches the model is the source hints Brain assembles — which is exactly what the **Sources** list shows you. A file Brain did not retrieve was not read.
+- **Excluded folders are enforced, not advisory.** Files inside them are never read, never ranked, and never sent. The same is true of the instructions file.
 - **All persisted content stays in your vault** as normal markdown. There is no Brain-owned storage outside the vault.
 
 ## Troubleshooting
@@ -248,13 +260,15 @@ No. Brain uses whatever login the local Codex CLI uses. Run `codex login status`
 No. The write plan is normalized to `append` or `create` only, paths are checked against `isSafeMarkdownPath`, and you approve each operation in a modal before anything is written. There is no UI surface that can issue a delete or overwrite.
 
 **Can I keep plugin data, generated notes, or scratch folders out of retrieval?**
-Yes. Add them to **Excluded folders** in settings, one path per line. The default list already excludes `.obsidian` and `node_modules`, so plugin internals are out of retrieval by default; you only need to add other folders you want kept private (for example a scratch folder, or another dot-folder used by a different plugin).
+Yes, and the exclusion is enforced rather than advisory. Add them to **Excluded folders** in settings, one path per line. Brain never reads those files and never sends them to Codex, and Codex has no way to reach them on its own. The default list already excludes `.obsidian` and `node_modules`; add any other folder you want kept out, such as a scratch folder or a dot-folder used by a different plugin.
 
 **Where does Brain keep my conversation history?**
 In memory only. The last 6 exchanges are kept in the sidebar while it is open, and they are lost when the sidebar is closed or Obsidian is restarted. There is no on-disk transcript.
 
-**Why does Brain run Codex from the vault root?**
-So that the model can use read-only shell commands to inspect markdown if it needs more context than the source hints provide. Codex is invoked with `--sandbox read-only`, so it cannot modify your files.
+**Can Codex read notes that Brain did not retrieve?**
+No. Brain runs it from an empty temporary directory with `--sandbox read-only`, and the prompt states it has no filesystem access. Whatever the model saw is what the **Sources** list shows. This is what makes the answer auditable: if a claim is not supported by a listed source, it is not supported by your vault.
+
+The trade-off is that a bad retrieval cannot be rescued by the model going to look for itself. Brain is built to fail visibly here — it is told to say what is missing and what you might search for instead, rather than guess.
 
 **Will Brain work on Obsidian Mobile?**
 No. The plugin is `isDesktopOnly: true` because it shells out to a local CLI.
@@ -268,7 +282,7 @@ npm run build    # Bundle main.js
 npm run dev      # Watch mode for the bundle
 ```
 
-The smoke tests cover settings normalization, Codex status parsing, Codex model catalog parsing, vault query filtering, safe write-plan normalization (including the `droppedOperations` count), and exclude-folder behavior. Add or extend tests in `scripts/smoke-tests.ts` when you change any of those surfaces.
+The smoke tests cover settings normalization (including the Codex timeout clamp), Codex status parsing, Codex model catalog parsing, chat-response JSON parsing, path safety, query tokenization, vault query filtering, safe write-plan normalization (including the `droppedOperations` count), and exclude-folder behavior. Add or extend tests in `scripts/smoke-tests.ts` when you change any of those surfaces.
 
 ### Verify an Installed Bundle
 

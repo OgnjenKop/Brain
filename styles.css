@@ -421,6 +421,21 @@
   animation: brain-fade-in-up 0.2s ease-out;
 }
 
+.brain-plan-action {
+  display: flex;
+}
+
+.brain-plan-action button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.brain-plan-action button svg {
+  width: 0.9em;
+  height: 0.9em;
+}
+
 .brain-updated-files {
   display: flex;
   flex-direction: column;
